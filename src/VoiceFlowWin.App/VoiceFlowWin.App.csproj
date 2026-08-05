@@ -14,6 +14,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!--
+      WPF и WinForms подключены оба: окна рисует WPF, а значок в трее даёт
+      NotifyIcon из WinForms. Глобальный using System.Windows.Forms сделал бы
+      Application, MessageBox и KeyEventArgs неоднозначными в каждом файле,
+      поэтому он убран — трей подключает пространство имён явно.
+    -->
+    <Using Remove="System.Windows.Forms" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Microsoft.Extensions.Logging" />

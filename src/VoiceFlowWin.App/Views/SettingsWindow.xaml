@@ -1,0 +1,293 @@
+<Window x:Class="VoiceFlowWin.App.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:VoiceFlowWin.App.Views"
+        Title="VoiceFlowWin — настройки"
+        Width="760"
+        Height="640"
+        Background="{StaticResource SurfaceBrush}"
+        WindowStartupLocation="CenterScreen">
+
+    <Window.Resources>
+        <views:EnumMatchConverter x:Key="EnumMatch" />
+    </Window.Resources>
+
+    <DockPanel Margin="12">
+
+        <Border DockPanel.Dock="Bottom" Margin="0,12,0,0">
+            <StackPanel Orientation="Horizontal">
+                <Button Content="Сохранить" Command="{Binding SaveCommand}" Background="{StaticResource AccentBrush}" />
+                <Button Content="Закрыть" Click="OnCloseClick" />
+                <TextBlock Text="{Binding StatusMessage}" Style="{StaticResource MutedText}"
+                           VerticalAlignment="Center" Margin="12,0,0,0" />
+            </StackPanel>
+        </Border>
+
+        <TabControl x:Name="Tabs" Background="{StaticResource SurfaceBrush}" BorderThickness="0">
+
+            <TabItem Header="Основное">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="12">
+
+                        <TextBlock Text="Вызов диктовки" Style="{StaticResource SectionHeader}" />
+                        <RadioButton GroupName="Activation" Content="Toggle — нажатие включает, повторное выключает"
+                                     IsChecked="{Binding Draft.General.ActivationMode, Converter={StaticResource EnumMatch}, ConverterParameter=Toggle}" />
+                        <RadioButton GroupName="Activation" Content="Push-to-talk — диктовка идёт, пока клавиша удерживается"
+                                     IsChecked="{Binding Draft.General.ActivationMode, Converter={StaticResource EnumMatch}, ConverterParameter=PushToTalk}" />
+
+                        <TextBlock Text="Клавиша вызова голосового набора" Style="{StaticResource SectionHeader}" />
+                        <StackPanel Orientation="Horizontal">
+                            <Border Background="{StaticResource SurfaceAltBrush}" CornerRadius="4" Padding="10,6" MinWidth="180">
+                                <TextBlock Text="{Binding HotkeyText}" />
+                            </Border>
+                            <Button Content="Назначить" Click="OnAssignHotkeyClick" Margin="8,0,8,0" />
+                            <Button Content="Проверить" Command="{Binding TestHotkeyCommand}" />
+                            <Button Content="Сбросить" Command="{Binding ClearHotkeyCommand}" />
+                            <Button Content="По умолчанию" Command="{Binding ResetHotkeyCommand}" />
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource MutedText}" Margin="0,6,0,0"
+                                   Text="Esc всегда останавливает активную диктовку и не может быть назначен клавишей вызова." />
+
+                        <TextBlock Text="Поведение Esc" Style="{StaticResource SectionHeader}" />
+                        <RadioButton GroupName="Escape" Content="Завершить диктовку и сохранить распознанный текст"
+                                     IsChecked="{Binding Draft.General.EscapeBehavior, Converter={StaticResource EnumMatch}, ConverterParameter=FinalizeAndKeep}" />
+                        <RadioButton GroupName="Escape" Content="Отменить текущий незавершённый сегмент"
+                                     IsChecked="{Binding Draft.General.EscapeBehavior, Converter={StaticResource EnumMatch}, ConverterParameter=CancelSegment}" />
+                        <CheckBox Content="Не передавать Esc активному приложению во время диктовки"
+                                  IsChecked="{Binding Draft.General.SuppressEscapeDuringDictation}" />
+
+                        <TextBlock Text="Язык распознавания" Style="{StaticResource SectionHeader}" />
+                        <RadioButton GroupName="Language" Content="По раскладке активного окна"
+                                     IsChecked="{Binding Draft.General.LanguageMode, Converter={StaticResource EnumMatch}, ConverterParameter=FollowKeyboardLayout}" />
+                        <RadioButton GroupName="Language" Content="Всегда русский"
+                                     IsChecked="{Binding Draft.General.LanguageMode, Converter={StaticResource EnumMatch}, ConverterParameter=AlwaysRussian}" />
+                        <RadioButton GroupName="Language" Content="Всегда английский"
+                                     IsChecked="{Binding Draft.General.LanguageMode, Converter={StaticResource EnumMatch}, ConverterParameter=AlwaysEnglish}" />
+                        <RadioButton GroupName="Language" Content="Автоопределение Whisper"
+                                     IsChecked="{Binding Draft.General.LanguageMode, Converter={StaticResource EnumMatch}, ConverterParameter=WhisperAutoDetect}" />
+
+                        <TextBlock Text="Живой ввод" Style="{StaticResource SectionHeader}" />
+                        <RadioButton GroupName="Live" Content="Безопасный режим — в поле уходят только стабильные слова"
+                                     IsChecked="{Binding Draft.General.LiveTextMode, Converter={StaticResource EnumMatch}, ConverterParameter=SafeStreaming}" />
+                        <RadioButton GroupName="Live" Content="Максимально живой — вводится и изменяемый хвост"
+                                     IsChecked="{Binding Draft.General.LiveTextMode, Converter={StaticResource EnumMatch}, ConverterParameter=MaximumLive}" />
+                        <TextBlock Style="{StaticResource MutedText}"
+                                   Text="Живой режим переписывает собственный хвост нажатиями Backspace и совместим не со всеми приложениями." />
+
+                        <TextBlock Text="Прочее" Style="{StaticResource SectionHeader}" />
+                        <CheckBox Content="Запускать вместе с Windows" IsChecked="{Binding Draft.General.StartWithWindows}" />
+                        <CheckBox Content="Запускать свёрнутым в трей" IsChecked="{Binding Draft.General.StartMinimized}" />
+                        <CheckBox Content="Автоматическая пунктуация" IsChecked="{Binding Draft.General.AutomaticPunctuation}" />
+                        <CheckBox Content="Голосовые команды пунктуации и правки" IsChecked="{Binding Draft.General.VoiceCommandsEnabled}" />
+                        <CheckBox Content="Показывать overlay" IsChecked="{Binding Draft.Overlay.Visible}" />
+                        <CheckBox Content="Скрывать текст в overlay" IsChecked="{Binding Draft.Overlay.HideText}" />
+
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="Микрофон">
+                <StackPanel Margin="12">
+                    <TextBlock Text="Устройство записи" Style="{StaticResource SectionHeader}" />
+                    <ComboBox ItemsSource="{Binding Devices}" DisplayMemberPath="Name"
+                              SelectedValuePath="Id" SelectedValue="{Binding Draft.Microphone.DeviceId}" />
+
+                    <TextBlock Text="Усиление, дБ" Style="{StaticResource SectionHeader}" />
+                    <Slider Minimum="-12" Maximum="24" TickFrequency="1" IsSnapToTickEnabled="True"
+                            Value="{Binding Draft.Microphone.GainDb}" />
+                    <TextBlock Text="{Binding Draft.Microphone.GainDb, StringFormat={}{0:0} дБ}" Style="{StaticResource MutedText}" />
+
+                    <TextBlock Text="Чувствительность определения речи" Style="{StaticResource SectionHeader}" />
+                    <Slider Minimum="0" Maximum="1" TickFrequency="0.05" IsSnapToTickEnabled="True"
+                            Value="{Binding Draft.Segmentation.VadSensitivity}" />
+                    <TextBlock Style="{StaticResource MutedText}"
+                               Text="Меньше — реагирует на тихую речь, больше — игнорирует фоновый шум." />
+
+                    <TextBlock Text="Пауза для завершения фразы, мс" Style="{StaticResource SectionHeader}" />
+                    <TextBox Text="{Binding Draft.Segmentation.SilenceToEndSegmentMs}" Width="120" HorizontalAlignment="Left" />
+
+                    <TextBlock Text="Максимальная длительность сегмента, с" Style="{StaticResource SectionHeader}" />
+                    <TextBox Text="{Binding Draft.Segmentation.MaxSegmentSeconds}" Width="120" HorizontalAlignment="Left" />
+
+                    <CheckBox Content="Шумоподавление устройства, если доступно" Margin="0,12,0,0"
+                              IsChecked="{Binding Draft.Microphone.NoiseSuppression}" />
+                </StackPanel>
+            </TabItem>
+
+            <TabItem Header="Модели" x:Name="ModelsTab">
+                <DockPanel Margin="12">
+                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,12,0,0">
+                        <Button Content="Скачать" Command="{Binding InstallModelCommand}"
+                                CommandParameter="{Binding SelectedModel}" Background="{StaticResource AccentBrush}" />
+                        <Button Content="Отменить загрузку" Command="{Binding CancelModelDownloadCommand}" />
+                        <Button Content="Удалить" Command="{Binding RemoveModelCommand}" />
+                    </StackPanel>
+
+                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource MutedText}" Margin="0,0,0,8"
+                               Text="Модели не входят в установщик и хранятся в папке данных пользователя. Обновление приложения их не удаляет." />
+
+                    <ListView ItemsSource="{Binding Models}" SelectedItem="{Binding SelectedModel}"
+                              Background="{StaticResource SurfaceAltBrush}" BorderThickness="0">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="Модель" Width="230" DisplayMemberBinding="{Binding DisplayName}" />
+                                <GridViewColumn Header="Язык" Width="110" DisplayMemberBinding="{Binding LanguageText}" />
+                                <GridViewColumn Header="Размер" Width="90" DisplayMemberBinding="{Binding SizeText}" />
+                                <GridViewColumn Header="Состояние" Width="110" DisplayMemberBinding="{Binding StatusText}" />
+                                <GridViewColumn Header="Загрузка" Width="140">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel>
+                                                <ProgressBar Height="6" Minimum="0" Maximum="1" Value="{Binding Progress}" />
+                                                <TextBlock Text="{Binding Stage}" FontSize="10" Foreground="#FF9AA5B8" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="Распознавание">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="12">
+                        <TextBlock Text="Vosk — потоковое распознавание" Style="{StaticResource SectionHeader}" />
+                        <TextBlock Text="Путь к русской модели" Style="{StaticResource MutedText}" />
+                        <TextBox Text="{Binding Draft.Vosk.RussianModelPath}" />
+                        <TextBlock Text="Путь к английской модели" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
+                        <TextBox Text="{Binding Draft.Vosk.EnglishModelPath}" />
+
+                        <TextBlock Text="Частота промежуточных результатов, мс" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
+                        <TextBox Text="{Binding Draft.Vosk.PartialResultIntervalMs}" Width="120" HorizontalAlignment="Left" />
+
+                        <TextBlock Text="Подтверждений для стабильного слова" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
+                        <TextBox Text="{Binding Draft.Vosk.StableRepeats}" Width="120" HorizontalAlignment="Left" />
+
+                        <TextBlock Text="Задержка стабилизации, мс" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
+                        <TextBox Text="{Binding Draft.Vosk.StabilityDelayMs}" Width="120" HorizontalAlignment="Left" />
+
+                        <TextBlock Text="Размер изменяемого хвоста, слов" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
+                        <TextBox Text="{Binding Draft.Vosk.VolatileTailWords}" Width="120" HorizontalAlignment="Left" />
+
+                        <TextBlock Text="Whisper — финальная обработка" Style="{StaticResource SectionHeader}" />
+                        <TextBlock Text="Путь к модели" Style="{StaticResource MutedText}" />
+                        <TextBox Text="{Binding Draft.Whisper.ModelPath}" />
+
+                        <TextBlock Text="Потоков CPU" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
+                        <TextBox Text="{Binding Draft.Whisper.CpuThreads}" Width="120" HorizontalAlignment="Left" />
+
+                        <CheckBox Content="Передавать Whisper контекст предыдущей фразы" Margin="0,8,0,0"
+                                  IsChecked="{Binding Draft.Whisper.UsePreviousTextContext}" />
+                        <TextBlock Style="{StaticResource MutedText}"
+                                   Text="Контекст улучшает согласование форм слов, но передаётся ограниченным числом последних слов." />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="Вставка текста">
+                <StackPanel Margin="12">
+                    <TextBlock Text="Способ ввода" Style="{StaticResource SectionHeader}" />
+                    <RadioButton GroupName="Injection" Content="SendInput — Unicode-ввод, не зависит от раскладки"
+                                 IsChecked="{Binding Draft.Injection.Mode, Converter={StaticResource EnumMatch}, ConverterParameter=SendInput}" />
+                    <RadioButton GroupName="Injection" Content="Буфер обмена — вставка через Ctrl+V"
+                                 IsChecked="{Binding Draft.Injection.Mode, Converter={StaticResource EnumMatch}, ConverterParameter=Clipboard}" />
+                    <RadioButton GroupName="Injection" Content="Автоматически — SendInput с резервным буфером обмена"
+                                 IsChecked="{Binding Draft.Injection.Mode, Converter={StaticResource EnumMatch}, ConverterParameter=AutoFallback}" />
+                    <RadioButton GroupName="Injection" Content="Режим совместимости — посимвольный ввод"
+                                 IsChecked="{Binding Draft.Injection.Mode, Converter={StaticResource EnumMatch}, ConverterParameter=Compatibility}" />
+
+                    <TextBlock Text="Задержка между нажатиями, мс" Style="{StaticResource MutedText}" Margin="0,12,0,0" />
+                    <TextBox Text="{Binding Draft.Injection.KeystrokeDelayMs}" Width="120" HorizontalAlignment="Left" />
+
+                    <TextBlock Text="Пауза перед восстановлением буфера обмена, мс" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
+                    <TextBox Text="{Binding Draft.Injection.ClipboardRestoreDelayMs}" Width="120" HorizontalAlignment="Left" />
+
+                    <TextBlock Text="Безопасность замены" Style="{StaticResource SectionHeader}" />
+                    <CheckBox Content="Разрешать автоматическую замену текста результатом Whisper"
+                              IsChecked="{Binding Draft.Injection.SafeFinalReplacement}" />
+                    <CheckBox Content="Запрещать замену после вмешательства пользователя"
+                              IsChecked="{Binding Draft.Injection.BlockReplacementAfterIntervention}" />
+                    <TextBlock Style="{StaticResource MutedText}"
+                               Text="Приложение изменяет только символы, которые вставило само, и никогда не удаляет текст пользователя." />
+                </StackPanel>
+            </TabItem>
+
+            <TabItem Header="Словарь">
+                <DockPanel Margin="12">
+                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,12,0,0">
+                        <Button Content="Добавить" Command="{Binding AddDictionaryEntryCommand}" />
+                        <Button Content="Удалить" Command="{Binding RemoveDictionaryEntryCommand}" />
+                        <Button Content="Импорт JSON" Click="OnImportDictionaryClick" />
+                        <Button Content="Экспорт JSON" Click="OnExportDictionaryClick" />
+                    </StackPanel>
+
+                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource MutedText}" Margin="0,0,0,8"
+                               Text="Замены применяются к целым словам и фразам — совпадения внутри других слов игнорируются." />
+
+                    <DataGrid ItemsSource="{Binding DictionaryEntries}" SelectedItem="{Binding SelectedEntry}"
+                              AutoGenerateColumns="False" Background="{StaticResource SurfaceAltBrush}"
+                              GridLinesVisibility="None" HeadersVisibility="Column" CanUserAddRows="False">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Произносится" Width="220" Binding="{Binding SpokenForm}" />
+                            <DataGridTextColumn Header="Пишется" Width="200" Binding="{Binding Replacement}" />
+                            <DataGridCheckBoxColumn Header="Регистр" Width="80" Binding="{Binding CaseSensitive}" />
+                            <DataGridCheckBoxColumn Header="Включена" Width="90" Binding="{Binding Enabled}" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="Конфиденциальность">
+                <StackPanel Margin="12">
+                    <TextBlock Style="{StaticResource MutedText}"
+                               Text="Распознавание выполняется полностью локально. Аудио и текст не покидают компьютер, телеметрии нет." />
+
+                    <TextBlock Text="Хранение данных" Style="{StaticResource SectionHeader}" />
+                    <CheckBox Content="Сохранять аудио сегментов" IsChecked="{Binding Draft.Privacy.StoreAudio}" />
+                    <CheckBox Content="Сохранять распознанный текст" IsChecked="{Binding Draft.Privacy.StoreRecognizedText}" />
+                    <CheckBox Content="Вести историю диктовок" IsChecked="{Binding Draft.Privacy.KeepHistory}" />
+
+                    <TextBlock Text="Срок хранения истории, дней" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
+                    <TextBox Text="{Binding Draft.Privacy.HistoryRetentionDays}" Width="120" HorizontalAlignment="Left" />
+
+                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                        <Button Content="Открыть папку данных" Click="OnOpenDataFolderClick" MinWidth="180" />
+                        <Button Content="Очистить историю" Click="OnClearHistoryClick" MinWidth="160" />
+                    </StackPanel>
+                </StackPanel>
+            </TabItem>
+
+            <TabItem Header="Обновления">
+                <StackPanel Margin="12">
+                    <TextBlock Text="{Binding VersionText}" Style="{StaticResource SectionHeader}" />
+                    <TextBlock Text="{Binding UpdateStatusText}" />
+                    <TextBlock Text="{Binding LastCheckedText}" Style="{StaticResource MutedText}" Margin="0,4,0,0" />
+
+                    <ProgressBar Height="6" Margin="0,10,0,0" Minimum="0" Maximum="1" Value="{Binding UpdateProgress}" />
+
+                    <TextBlock Text="Канал обновлений" Style="{StaticResource SectionHeader}" />
+                    <RadioButton GroupName="Channel" Content="Stable — только стабильные выпуски"
+                                 IsChecked="{Binding Draft.Updates.Channel, Converter={StaticResource EnumMatch}, ConverterParameter=Stable}" />
+                    <RadioButton GroupName="Channel" Content="Beta — включая предрелизные версии"
+                                 IsChecked="{Binding Draft.Updates.Channel, Converter={StaticResource EnumMatch}, ConverterParameter=Beta}" />
+
+                    <CheckBox Content="Скачивать обновления автоматически" Margin="0,8,0,0"
+                              IsChecked="{Binding Draft.Updates.AutomaticDownload}" />
+
+                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                        <Button Content="Проверить сейчас" Command="{Binding CheckUpdatesCommand}" />
+                        <Button Content="Обновить сейчас" Command="{Binding InstallUpdateCommand}" Background="{StaticResource AccentBrush}" />
+                        <Button Content="Позже" Command="{Binding PostponeUpdateCommand}" />
+                        <Button Content="Список изменений" Click="OnOpenReleaseNotesClick" MinWidth="150" />
+                    </StackPanel>
+
+                    <TextBlock Style="{StaticResource MutedText}" Margin="0,12,0,0"
+                               Text="Обновление проверяется при каждом запуске и раз в несколько часов работы. Установка не начнётся во время активной диктовки." />
+                </StackPanel>
+            </TabItem>
+
+        </TabControl>
+    </DockPanel>
+</Window>

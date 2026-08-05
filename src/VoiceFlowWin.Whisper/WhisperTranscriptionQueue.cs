@@ -15,7 +15,7 @@ namespace VoiceFlowWin.WhisperEngine;
 /// секунд. Поэтому задачи выполняются строго по очереди, в порядке
 /// поступления, в одном фоновом потоке.
 /// </remarks>
-public sealed class WhisperTranscriptionQueue : IAsyncDisposable
+public sealed class WhisperTranscriptionQueue : IFinalRecognitionQueue, IAsyncDisposable
 {
     private readonly IFinalRecognizer _recognizer;
     private readonly ILogger<WhisperTranscriptionQueue> _logger;

@@ -3,36 +3,6 @@ using VoiceFlowWin.Core.Settings;
 
 namespace VoiceFlowWin.Audio;
 
-public enum SegmentEndReason
-{
-    /// <summary>Пауза достаточной длины.</summary>
-    Silence,
-
-    /// <summary>Достигнута максимальная длительность сегмента.</summary>
-    MaxDuration,
-
-    /// <summary>Пользователь остановил диктовку клавишей.</summary>
-    Manual,
-
-    /// <summary>Нажат Esc.</summary>
-    Escape,
-}
-
-public sealed class SpeechSegmentEventArgs : EventArgs
-{
-    public SpeechSegmentEventArgs(byte[] pcm, SegmentEndReason reason)
-    {
-        Pcm = pcm;
-        Reason = reason;
-    }
-
-    public byte[] Pcm { get; }
-
-    public SegmentEndReason Reason { get; }
-
-    public int DurationMilliseconds => AudioFormat.MillisecondsFromBytes(Pcm.Length);
-}
-
 /// <summary>
 /// Режет непрерывный поток микрофона на речевые сегменты.
 /// </summary>
@@ -43,7 +13,7 @@ public sealed class SpeechSegmentEventArgs : EventArgs
 /// пользователя. Слишком короткие всплески (щелчок мыши, стук по столу)
 /// отбрасываются по <see cref="SegmentationSettings.MinSpeechMs"/>.
 /// </remarks>
-public sealed class SpeechSegmenter
+public sealed class SpeechSegmenter : ISpeechSegmenter
 {
     private readonly IVoiceActivityDetector _detector;
     private readonly RingAudioBuffer _preRoll;
@@ -71,7 +41,7 @@ public sealed class SpeechSegmenter
     public event EventHandler<SpeechSegmentEventArgs>? SegmentCompleted;
 
     /// <summary>Каждый обработанный кадр — для индикатора уровня в overlay.</summary>
-    public event EventHandler<VadFrameResult>? FrameProcessed;
+    public event EventHandler<AudioLevelInfo>? LevelChanged;
 
     public bool IsInSpeech
     {
@@ -177,7 +147,7 @@ public sealed class SpeechSegmenter
     private void ProcessFrame(byte[] frame)
     {
         var result = _detector.Process(frame);
-        FrameProcessed?.Invoke(this, result);
+        LevelChanged?.Invoke(this, new AudioLevelInfo(result.IsSpeech, result.Rms, AudioFormatConverter.ComputeLevelDb(frame)));
 
         if (!_inSpeech)
         {

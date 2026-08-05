@@ -1,0 +1,127 @@
+using System.Diagnostics;
+
+namespace VoiceFlowWin.UpdaterHost;
+
+/// <summary>
+/// Отдельный процесс, который переживает завершение основного приложения.
+/// </summary>
+/// <remarks>
+/// Приложение не может обновить само себя: его файлы заняты, пока оно
+/// работает. Поэтому updater ждёт выхода VoiceFlowWin по PID, запускает
+/// проверенный установщик и снова поднимает приложение. Если установщик
+/// завершился с ошибкой, приложение всё равно запускается обратно — рабочая
+/// версия не должна пропасть из-за неудачного обновления.
+/// </remarks>
+internal static class Program
+{
+    private static readonly TimeSpan ProcessWaitTimeout = TimeSpan.FromSeconds(30);
+
+    private static int Main(string[] args)
+    {
+        var options = ParseArguments(args);
+
+        if (options.InstallerPath is null || !File.Exists(options.InstallerPath))
+        {
+            Console.Error.WriteLine("Не указан или не найден файл установщика.");
+            return 2;
+        }
+
+        WaitForExit(options.ProcessId);
+
+        var installerExitCode = RunInstaller(options.InstallerPath);
+
+        if (options.RelaunchPath is not null && File.Exists(options.RelaunchPath))
+        {
+            TryRelaunch(options.RelaunchPath);
+        }
+
+        return installerExitCode;
+    }
+
+    private static void WaitForExit(int? processId)
+    {
+        if (processId is not { } id)
+        {
+            return;
+        }
+
+        try
+        {
+            using var process = Process.GetProcessById(id);
+            if (!process.WaitForExit((int)ProcessWaitTimeout.TotalMilliseconds))
+            {
+                Console.Error.WriteLine("Приложение не завершилось за отведённое время; установка продолжается.");
+            }
+        }
+        catch (ArgumentException)
+        {
+            // Процесс уже завершился — это нормальный случай.
+        }
+    }
+
+    private static int RunInstaller(string installerPath)
+    {
+        try
+        {
+            var startInfo = new ProcessStartInfo(installerPath)
+            {
+                UseShellExecute = true,
+            };
+
+            // Тихая установка с сохранением пользовательских данных.
+            startInfo.ArgumentList.Add("/SILENT");
+            startInfo.ArgumentList.Add("/NORESTART");
+
+            using var installer = Process.Start(startInfo);
+            if (installer is null)
+            {
+                return 3;
+            }
+
+            installer.WaitForExit();
+            return installer.ExitCode;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine("Ошибка запуска установщика: " + ex.Message);
+            return 4;
+        }
+    }
+
+    private static void TryRelaunch(string path)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine("Не удалось перезапустить приложение: " + ex.Message);
+        }
+    }
+
+    private static (int? ProcessId, string? InstallerPath, string? RelaunchPath) ParseArguments(string[] args)
+    {
+        int? processId = null;
+        string? installerPath = null;
+        string? relaunchPath = null;
+
+        for (var i = 0; i + 1 < args.Length; i += 2)
+        {
+            switch (args[i])
+            {
+                case "--pid" when int.TryParse(args[i + 1], out var parsed):
+                    processId = parsed;
+                    break;
+                case "--installer":
+                    installerPath = args[i + 1];
+                    break;
+                case "--relaunch":
+                    relaunchPath = args[i + 1];
+                    break;
+            }
+        }
+
+        return (processId, installerPath, relaunchPath);
+    }
+}

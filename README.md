@@ -104,6 +104,12 @@ dotnet test tests/VoiceFlowWin.Tests/VoiceFlowWin.Tests.csproj
 dotnet test tests/VoiceFlowWin.Windows.Tests/VoiceFlowWin.Windows.Tests.csproj
 ```
 
+Собирать выпуск нужно **на Windows**: пакеты Vosk и Whisper.net.Runtime
+подкладывают native-библиотеки по операционной системе сборки, а не по
+целевому RID. На Linux решение компилируется и проходит тесты, но в каталог
+публикации попадут `.so` вместо `.dll`. Поэтому publish и установщик в CI
+выполняются на `windows-latest`.
+
 Публикация и установщик (Windows, нужен Inno Setup 6):
 
 ```powershell

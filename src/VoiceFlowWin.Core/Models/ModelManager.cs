@@ -65,6 +65,84 @@ public sealed class ModelManager
         return model.IsArchive ? Directory.Exists(path) && Directory.EnumerateFileSystemEntries(path).Any() : File.Exists(path);
     }
 
+    /// <summary>
+    /// Приводит пути моделей в настройках в соответствие с тем, что реально
+    /// лежит на диске.
+    /// </summary>
+    /// <remarks>
+    /// Скачанная модель бесполезна, пока движок не знает пути к ней, а путь
+    /// удалённой модели ронял бы распознавание при следующем запуске. Поэтому
+    /// пустой путь заполняется установленной моделью, а путь, которого больше
+    /// нет на диске, очищается. Уже заданный рабочий путь не трогается: выбор
+    /// между компактной и полной моделью остаётся за пользователем.
+    /// </remarks>
+    /// <returns><c>true</c>, если настройки изменились и их нужно сохранить.</returns>
+    public bool SynchronizeInstalledPaths(AppSettings settings)
+    {
+        var changed = false;
+
+        if (ClearMissing(settings.Vosk.RussianModelPath, Directory.Exists))
+        {
+            settings.Vosk.RussianModelPath = string.Empty;
+            changed = true;
+        }
+
+        if (ClearMissing(settings.Vosk.EnglishModelPath, Directory.Exists))
+        {
+            settings.Vosk.EnglishModelPath = string.Empty;
+            changed = true;
+        }
+
+        if (ClearMissing(settings.Whisper.ModelPath, File.Exists))
+        {
+            settings.Whisper.ModelPath = string.Empty;
+            settings.Whisper.ModelId = string.Empty;
+            changed = true;
+        }
+
+        foreach (var model in ModelCatalog.All)
+        {
+            if (!IsInstalled(model))
+            {
+                continue;
+            }
+
+            var path = GetInstallPath(model);
+            if (model.Kind == ModelKind.Whisper)
+            {
+                if (string.IsNullOrWhiteSpace(settings.Whisper.ModelPath))
+                {
+                    settings.Whisper.ModelPath = path;
+                    settings.Whisper.ModelId = model.Id;
+                    changed = true;
+                }
+            }
+            else if (model.Language == RecognitionLanguage.English)
+            {
+                if (string.IsNullOrWhiteSpace(settings.Vosk.EnglishModelPath))
+                {
+                    settings.Vosk.EnglishModelPath = path;
+                    changed = true;
+                }
+            }
+            else if (string.IsNullOrWhiteSpace(settings.Vosk.RussianModelPath))
+            {
+                settings.Vosk.RussianModelPath = path;
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            _logger.LogInformation("Пути моделей в настройках синхронизированы с каталогом моделей.");
+        }
+
+        return changed;
+    }
+
+    private static bool ClearMissing(string path, Func<string, bool> exists) =>
+        !string.IsNullOrWhiteSpace(path) && !exists(path);
+
     public async Task<ModelInstallResult> InstallAsync(ModelDescriptor model, CancellationToken cancellationToken)
     {
         if (!Uri.TryCreate(model.Url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)

@@ -357,22 +357,36 @@ public sealed class SettingsViewModel : ObservableObject
     }
 
     /// <summary>Установленная модель сразу прописывается в настройки нужного движка.</summary>
+    /// <remarks>
+    /// Путь пишется и в черновик, и в сохранённые настройки. Иначе скачанная
+    /// модель не работала бы до нажатия «Сохранить», а закрытие окна теряло бы
+    /// её — диктовка падала с «Не задан путь к модели». Сохраняется только путь
+    /// модели: прочие правки черновика остаются несохранёнными, как и ожидает
+    /// пользователь.
+    /// </remarks>
     private void ApplyModelPath(ModelDescriptor descriptor, string path)
     {
+        var persisted = Clone(_settingsService.Current);
+
         if (descriptor.Kind == ModelKind.Whisper)
         {
             Draft.Whisper.ModelPath = path;
             Draft.Whisper.ModelId = descriptor.Id;
+            persisted.Whisper.ModelPath = path;
+            persisted.Whisper.ModelId = descriptor.Id;
         }
         else if (descriptor.Language == RecognitionLanguage.English)
         {
             Draft.Vosk.EnglishModelPath = path;
+            persisted.Vosk.EnglishModelPath = path;
         }
         else
         {
             Draft.Vosk.RussianModelPath = path;
+            persisted.Vosk.RussianModelPath = path;
         }
 
+        _settingsService.Save(persisted);
         OnPropertyChanged(nameof(Draft));
     }
 
@@ -397,6 +411,17 @@ public sealed class SettingsViewModel : ObservableObject
         if (_models.Remove(SelectedModel.Descriptor))
         {
             SelectedModel.IsInstalled = false;
+
+            // Путь удалённой модели убирается из настроек сразу: иначе движок
+            // при следующей диктовке упёрся бы в несуществующий каталог.
+            var persisted = Clone(_settingsService.Current);
+            if (_models.SynchronizeInstalledPaths(persisted))
+            {
+                _settingsService.Save(persisted);
+            }
+
+            _models.SynchronizeInstalledPaths(Draft);
+            OnPropertyChanged(nameof(Draft));
             StatusMessage = "Модель удалена.";
         }
     }

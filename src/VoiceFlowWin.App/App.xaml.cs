@@ -62,6 +62,15 @@ public partial class App : Application
         var settings = _services.GetRequiredService<ISettingsService>();
         settings.Load();
 
+        // Настройки могли остаться без путей к уже скачанным моделям — тогда
+        // диктовка падала бы с «Не задан путь к модели». Проверка на старте
+        // чинит такое состояние без участия пользователя.
+        var models = _services.GetRequiredService<ModelManager>();
+        if (models.SynchronizeInstalledPaths(settings.Current))
+        {
+            settings.Save(settings.Current);
+        }
+
         var dictionary = _services.GetRequiredService<IDictionaryStore>();
         _services.GetRequiredService<DictionaryProcessor>().Reload(dictionary.Load());
 

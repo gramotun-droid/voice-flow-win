@@ -46,7 +46,9 @@ public sealed class WhisperFinalRecognizer : IFinalRecognizer
         var modelPath = _settings.Current.Whisper.ModelPath;
         if (string.IsNullOrWhiteSpace(modelPath))
         {
-            throw new InvalidOperationException("Не задан путь к модели Whisper.");
+            throw new InvalidOperationException(
+                "Модель проверки фраз (Whisper) не установлена. " +
+                "Откройте настройки, вкладка «Модели», и скачайте её.");
         }
 
         if (!File.Exists(modelPath))

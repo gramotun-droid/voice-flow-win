@@ -35,12 +35,16 @@ public sealed class VoskModelLoader : IDisposable
 
         if (string.IsNullOrWhiteSpace(modelPath))
         {
-            throw new InvalidOperationException($"Не задан путь к модели Vosk для языка {language}.");
+            throw new InvalidOperationException(
+                $"Модель распознавания для {LanguageName(language)} языка не установлена. " +
+                "Откройте настройки, вкладка «Модели», и скачайте её.");
         }
 
         if (!Directory.Exists(modelPath))
         {
-            throw new DirectoryNotFoundException($"Модель Vosk не найдена: {modelPath}");
+            throw new DirectoryNotFoundException(
+                $"Модель для {LanguageName(language)} языка не найдена по пути {modelPath}. " +
+                "Скачайте её заново в настройках, вкладка «Модели».");
         }
 
         await _loadLock.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -63,6 +67,12 @@ public sealed class VoskModelLoader : IDisposable
     }
 
     public bool IsLoaded(RecognitionLanguage language) => _models.ContainsKey(language);
+
+    private static string LanguageName(RecognitionLanguage language) => language switch
+    {
+        RecognitionLanguage.English => "английского",
+        _ => "русского",
+    };
 
     public void Dispose()
     {

@@ -48,6 +48,14 @@ public enum UpdateChannel
 
 public sealed class AppSettings
 {
+    /// <summary>Версия схемы настроек; 0 означает файл, записанный до её появления.</summary>
+    /// <remarks>
+    /// Нужна, чтобы отличать значение, оставшееся от прежнего умолчания, от
+    /// такого же значения, выбранного пользователем осознанно: перенос
+    /// выполняется один раз, а после него выбор пользователя не трогается.
+    /// </remarks>
+    public int SchemaVersion { get; set; }
+
     public GeneralSettings General { get; set; } = new();
     public MicrophoneSettings Microphone { get; set; } = new();
     public VoskSettings Vosk { get; set; } = new();
@@ -57,6 +65,7 @@ public sealed class AppSettings
     public PrivacySettings Privacy { get; set; } = new();
     public UpdateSettings Updates { get; set; } = new();
     public OverlaySettings Overlay { get; set; } = new();
+    public ModelSettings Models { get; set; } = new();
 
     public AppSettings Clone() => (AppSettings)MemberwiseClone();
 }
@@ -205,6 +214,17 @@ public sealed class UpdateSettings
 
     /// <summary>Интервал плановой проверки при непрерывной работе.</summary>
     public int CheckIntervalHours { get; set; } = 4;
+}
+
+public sealed class ModelSettings
+{
+    /// <summary>Докачивать недостающие модели сразу после запуска.</summary>
+    /// <remarks>
+    /// Каталог целиком весит около 2,6 ГБ, поэтому загрузка идёт в фоне и
+    /// начинается с рекомендованных моделей: диктовка должна стать доступной
+    /// через первые сотни мегабайт, а не после всего набора.
+    /// </remarks>
+    public bool DownloadAllOnStartup { get; set; } = true;
 }
 
 public sealed class OverlaySettings

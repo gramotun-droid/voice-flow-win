@@ -60,8 +60,16 @@ public sealed class UpdateManifest
 
     public string Serialize() => JsonSerializer.Serialize(this, Options);
 
-    /// <summary>Проверяет, что манифест пригоден к использованию.</summary>
-    public bool IsValid(out string error)
+    /// <summary>
+    /// Проверяет, что о таком обновлении можно хотя бы сообщить пользователю.
+    /// </summary>
+    /// <remarks>
+    /// Манифест, собранный из GitHub Releases API, не содержит контрольной
+    /// суммы: она нужна для автоматической загрузки, но не для уведомления со
+    /// ссылкой на страницу релиза. Требовать её здесь значило бы молча
+    /// проглатывать выпуск, у которого не оказалось update-manifest.json.
+    /// </remarks>
+    public bool CanNotify(out string error)
     {
         if (!SemanticVersion.TryParse(Version, out _))
         {
@@ -72,6 +80,18 @@ public sealed class UpdateManifest
         if (!IsHttps(InstallerUrl))
         {
             error = "Ссылка на установщик должна использовать HTTPS.";
+            return false;
+        }
+
+        error = string.Empty;
+        return true;
+    }
+
+    /// <summary>Проверяет, что манифест пригоден для автоматической загрузки.</summary>
+    public bool IsValid(out string error)
+    {
+        if (!CanNotify(out error))
+        {
             return false;
         }
 

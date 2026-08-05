@@ -10,6 +10,16 @@
 #define MyAppVersion "0.0.0-dev"
 #endif
 
+; VersionInfoVersion попадает в ресурс версии PE-файла и допускает только
+; числа: SemVer-суффикс вроде «-rc.1» компилятор отвергает. Поэтому для
+; ресурса берётся числовая часть версии, а в AppVersion и имя файла уходит
+; полная версия с суффиксом.
+#if Pos("-", MyAppVersion) > 0
+  #define MyAppVersionNumeric Copy(MyAppVersion, 1, Pos("-", MyAppVersion) - 1)
+#else
+  #define MyAppVersionNumeric MyAppVersion
+#endif
+
 #define MyAppName "VoiceFlowWin"
 #define MyAppPublisher "gramotun"
 #define MyAppURL "https://github.com/gramotun-droid/voice-flow-win"
@@ -22,7 +32,7 @@ AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}/issues
-VersionInfoVersion={#MyAppVersion}
+VersionInfoVersion={#MyAppVersionNumeric}
 
 ; Установка для текущего пользователя: права администратора не нужны, а
 ; окно с запросом UAC при каждом обновлении только мешало бы.

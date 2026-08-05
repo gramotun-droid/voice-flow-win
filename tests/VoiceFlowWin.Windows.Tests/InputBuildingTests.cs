@@ -94,8 +94,8 @@ public class HotkeyDefinitionTests
     }
 
     [Fact]
-    public void Сочетание_по_умолчанию_это_Ctrl_Alt_Space() =>
-        Assert.Equal("Ctrl + Alt + Space", HotkeyDefinition.Default.ToDisplayString());
+    public void Сочетание_по_умолчанию_это_Ctrl_F5() =>
+        Assert.Equal("Ctrl + F5", HotkeyDefinition.Default.ToDisplayString());
 
     [Theory]
     [InlineData(0x70, "F1")]

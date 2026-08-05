@@ -25,8 +25,19 @@ public sealed record HotkeyDefinition(int VirtualKey, HotkeyModifiers Modifiers)
 {
     public const int VirtualKeyEscape = 0x1B;
 
-    /// <summary>Ctrl + Alt + Space.</summary>
-    public static readonly HotkeyDefinition Default = new(0x20, HotkeyModifiers.Control | HotkeyModifiers.Alt);
+    /// <summary>Ctrl + F5.</summary>
+    public static readonly HotkeyDefinition Default = new(0x74, HotkeyModifiers.Control);
+
+    /// <summary>
+    /// Сочетание по умолчанию из ранних версий: Ctrl + Alt + Space.
+    /// </summary>
+    /// <remarks>
+    /// Хранится только ради переноса настроек: пользователь, не менявший
+    /// сочетание, должен получить новое значение по умолчанию, а осознанный
+    /// выбор Ctrl + Alt + Space остаться не может — отличить его от прежнего
+    /// умолчания невозможно.
+    /// </remarks>
+    public static readonly HotkeyDefinition LegacyDefault = new(0x20, HotkeyModifiers.Control | HotkeyModifiers.Alt);
 
     [JsonIgnore]
     public bool IsEmpty => VirtualKey == 0;

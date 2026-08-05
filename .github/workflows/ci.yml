@@ -97,6 +97,15 @@ jobs:
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           & $iscc /DMyAppVersion=0.0.0-ci installer\voiceflowwin.iss
 
+      # Собранный установщик выкладывается артефактом: так проверочную сборку
+      # можно скачать и поставить, не выпуская релиз.
+      - name: Артефакт установщика
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: installer-windows
+          path: installer_output
+          if-no-files-found: error
+
       - name: Диагностика при ошибке
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

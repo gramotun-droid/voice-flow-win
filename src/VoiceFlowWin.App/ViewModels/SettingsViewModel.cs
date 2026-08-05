@@ -568,5 +568,9 @@ public sealed class SettingsViewModel : ObservableObject
             Left = source.Overlay.Left,
             Top = source.Overlay.Top,
         },
+        Models = new ModelSettings
+        {
+            DownloadAllOnStartup = source.Models.DownloadAllOnStartup,
+        },
     };
 }

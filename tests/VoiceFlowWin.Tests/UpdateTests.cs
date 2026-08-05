@@ -1,4 +1,6 @@
+using System.Net.Http;
 using System.Security.Cryptography;
+using VoiceFlowWin.Core.Settings;
 using VoiceFlowWin.Updater;
 using Xunit;
 
@@ -72,12 +74,34 @@ public class UpdateManifestTests
     }
 
     [Fact]
-    public void Манифест_без_контрольной_суммы_отвергается()
+    public void Манифест_без_контрольной_суммы_не_годится_для_загрузки()
     {
         var manifest = Valid();
         manifest.Sha256 = "коротко";
 
         Assert.False(manifest.IsValid(out _));
+    }
+
+    [Fact]
+    public void Манифест_без_контрольной_суммы_годится_для_уведомления()
+    {
+        // Такой манифест собирается из GitHub Releases API, когда в релизе нет
+        // update-manifest.json: сообщить о выпуске можно, скачать — нет.
+        var manifest = Valid();
+        manifest.Sha256 = string.Empty;
+        manifest.Size = 0;
+
+        Assert.True(manifest.CanNotify(out _));
+        Assert.False(manifest.IsValid(out _));
+    }
+
+    [Fact]
+    public void Уведомить_о_манифесте_без_версии_нельзя()
+    {
+        var manifest = Valid();
+        manifest.Version = "не версия";
+
+        Assert.False(manifest.CanNotify(out _));
     }
 
     [Fact]
@@ -96,6 +120,57 @@ public class UpdateManifestTests
     [Fact]
     public void Битый_JSON_не_роняет_разбор() =>
         Assert.Null(UpdateManifest.Deserialize("{ это не json"));
+}
+
+/// <summary>
+/// Проверяет поведение проверки обновлений без сети: она не должна ни падать,
+/// ни терять отметку о времени проверки.
+/// </summary>
+public sealed class UpdateServiceTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "vfw-updates-" + Guid.NewGuid().ToString("N"));
+    private readonly AppPaths _paths;
+
+    public UpdateServiceTests()
+    {
+        _paths = new AppPaths(_root);
+        _paths.EnsureCreated();
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_root))
+        {
+            Directory.Delete(_root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Время_проверки_сохраняется_на_диск()
+    {
+        var settingsService = new SettingsService(_paths);
+        var settings = settingsService.Load();
+
+        // Адреса без HTTPS отсекаются до обращения к сети: тест не ходит наружу.
+        settings.Updates.ManifestUrl = "file:///нет";
+        settings.Updates.ReleasesApiUrl = "file:///нет";
+        settingsService.Save(settings);
+
+        var httpClient = new HttpClient();
+        var verifier = new PackageVerifier();
+        await using var service = new UpdateService(
+            httpClient,
+            new UpdateDownloader(httpClient, verifier),
+            verifier,
+            settingsService,
+            _paths,
+            new SemanticVersion(0, 1, 0));
+
+        await service.CheckNowAsync(CancellationToken.None);
+
+        var reloaded = new SettingsService(_paths).Load();
+        Assert.NotNull(reloaded.Updates.LastCheckedAt);
+    }
 }
 
 public class PackageVerifierTests : IDisposable

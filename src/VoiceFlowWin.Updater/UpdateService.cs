@@ -109,6 +109,10 @@ public sealed class UpdateService : IAsyncDisposable
             var updateSettings = _settings.Current.Updates;
             updateSettings.LastCheckedAt = DateTimeOffset.UtcNow;
 
+            // Время проверки нужно записать на диск: иначе после перезапуска
+            // приложение показывало бы, что не проверялось никогда.
+            _settings.Save(_settings.Current);
+
             if (manifest is null)
             {
                 // Нет сети или манифест недоступен — это не ошибка для пользователя.
@@ -116,7 +120,7 @@ public sealed class UpdateService : IAsyncDisposable
                 return Status;
             }
 
-            if (!manifest.IsValid(out var error))
+            if (!manifest.CanNotify(out var error))
             {
                 _logger.LogWarning("Манифест обновления некорректен: {Error}", error);
                 SetStatus(UpdateStatus.Idle);
@@ -137,7 +141,19 @@ public sealed class UpdateService : IAsyncDisposable
 
             if (updateSettings.AutomaticDownload || manifest.Mandatory)
             {
-                await DownloadAsync(manifest, cancellationToken).ConfigureAwait(false);
+                // Без контрольной суммы автоматическая загрузка невозможна:
+                // пользователю остаётся уведомление со ссылкой на релиз.
+                if (manifest.IsValid(out var downloadError))
+                {
+                    await DownloadAsync(manifest, cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    _logger.LogInformation(
+                        "Обновление {Version} доступно, но скачивается только вручную: {Error}",
+                        availableVersion,
+                        downloadError);
+                }
             }
 
             return Status;

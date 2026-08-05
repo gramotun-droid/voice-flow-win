@@ -126,6 +126,10 @@
                     <TextBlock DockPanel.Dock="Top" Style="{StaticResource MutedText}" Margin="0,0,0,8"
                                Text="Модели не входят в установщик и хранятся в папке данных пользователя. Обновление приложения их не удаляет." />
 
+                    <CheckBox DockPanel.Dock="Top" Margin="0,0,0,8"
+                              Content="Скачивать все модели автоматически при запуске (весь набор — около 2,6 ГБ)"
+                              IsChecked="{Binding Draft.Models.DownloadAllOnStartup}" />
+
                     <ListView ItemsSource="{Binding Models}" SelectedItem="{Binding SelectedModel}"
                               Background="{StaticResource SurfaceAltBrush}" BorderThickness="0">
                         <ListView.View>

@@ -33,6 +33,7 @@ public partial class App : Application
     private TrayIconHost? _tray;
     private OverlayWindow? _overlay;
     private SettingsWindow? _settingsWindow;
+    private CancellationTokenSource? _modelDownloads;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -103,14 +104,38 @@ public partial class App : Application
             ShowSettings();
         }
 
+        // Недостающие модели докачиваются сами. Окно моделей открывается,
+        // только пока приложение к работе не готово: там видно, что и куда
+        // качается, а нажимать ничего не нужно.
+        StartModelDownloads();
+
         if (RequiresFirstRunSetup(settings.Current))
         {
             ShowSettings(openModelsTab: true);
         }
     }
 
+    private void StartModelDownloads()
+    {
+        if (_services is null)
+        {
+            return;
+        }
+
+        var installer = _services.GetRequiredService<ModelAutoInstaller>();
+        _modelDownloads = new CancellationTokenSource();
+        var token = _modelDownloads.Token;
+
+        // Загрузка живёт в фоне: запуск приложения и первая диктовка её не ждут.
+        _ = Task.Run(() => installer.InstallMissingAsync(token), token);
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
+        // Незавершённая загрузка модели прерывается: временный файл останется
+        // в каталоге обновлений моделей и будет перекачан при следующем старте.
+        _modelDownloads?.Cancel();
+        _modelDownloads?.Dispose();
         _tray?.Dispose();
         _services?.Dispose();
         _singleInstanceMutex?.Dispose();
@@ -211,6 +236,7 @@ public partial class App : Application
             CurrentVersion(),
             provider.GetRequiredService<ILogger<UpdateService>>()));
         services.AddSingleton<ModelManager>();
+        services.AddSingleton<ModelAutoInstaller>();
         services.AddSingleton<UpdateInstaller>();
 
         // Интерфейс.

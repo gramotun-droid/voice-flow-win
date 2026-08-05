@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -42,6 +43,19 @@ public readonly record struct ModelInstallResult(bool Success, string? Path, str
 /// </remarks>
 public sealed class ModelManager
 {
+    /// <summary>Сколько ждать заголовков ответа, прежде чем считать источник недоступным.</summary>
+    private static readonly TimeSpan HeadersTimeout = TimeSpan.FromSeconds(30);
+
+    /// <summary>Сколько молчания в уже открытом потоке считается обрывом.</summary>
+    private static readonly TimeSpan StallTimeout = TimeSpan.FromSeconds(45);
+
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(3);
+
+    /// <summary>Как часто обновляется индикатор загрузки.</summary>
+    private static readonly TimeSpan ReportInterval = TimeSpan.FromMilliseconds(250);
+
+    private const int AttemptsPerSource = 3;
+
     private readonly HttpClient _httpClient;
     private readonly AppPaths _paths;
     private readonly ILogger<ModelManager> _logger;
@@ -145,7 +159,12 @@ public sealed class ModelManager
 
     public async Task<ModelInstallResult> InstallAsync(ModelDescriptor model, CancellationToken cancellationToken)
     {
-        if (!Uri.TryCreate(model.Url, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
+        var sources = model.DownloadUrls
+            .Select(url => Uri.TryCreate(url, UriKind.Absolute, out var parsed) && parsed.Scheme == Uri.UriSchemeHttps ? parsed : null)
+            .OfType<Uri>()
+            .ToList();
+
+        if (sources.Count == 0)
         {
             return ModelInstallResult.Failure("Ссылка на модель должна использовать HTTPS.");
         }
@@ -156,7 +175,7 @@ public sealed class ModelManager
 
         try
         {
-            await DownloadAsync(model, uri, tempFile, cancellationToken).ConfigureAwait(false);
+            await DownloadAsync(model, sources, tempFile, cancellationToken).ConfigureAwait(false);
 
             if (!string.IsNullOrEmpty(model.Sha256))
             {
@@ -293,31 +312,149 @@ public sealed class ModelManager
         Directory.Delete(inner, recursive: true);
     }
 
-    private async Task DownloadAsync(ModelDescriptor model, Uri uri, string tempFile, CancellationToken cancellationToken)
+    /// <summary>
+    /// Качает модель, перебирая источники и продолжая прерванную загрузку.
+    /// </summary>
+    /// <remarks>
+    /// Раньше загрузка шла одним запросом без ограничения по времени: если
+    /// сервер переставал отдавать данные, приложение молча ждало часами, а
+    /// обрыв означал загрузку с нуля. Теперь простое соединение обрывается по
+    /// таймауту, попытка повторяется с уже скачанного места, а после
+    /// нескольких неудач берётся следующий источник.
+    /// </remarks>
+    private async Task DownloadAsync(
+        ModelDescriptor model,
+        IReadOnlyList<Uri> sources,
+        string tempFile,
+        CancellationToken cancellationToken)
     {
+        Exception? lastError = null;
+
+        foreach (var uri in sources)
+        {
+            for (var attempt = 1; attempt <= AttemptsPerSource; attempt++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                try
+                {
+                    await DownloadFromSourceAsync(model, uri, tempFile, cancellationToken).ConfigureAwait(false);
+                    return;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex) when (ex is HttpRequestException or IOException or OperationCanceledException)
+                {
+                    // OperationCanceledException без запроса отмены означает
+                    // молчание сервера дольше StallTimeout.
+                    lastError = ex;
+                    _logger.LogWarning(
+                        "Загрузка модели {ModelId} с {Host} прервана (попытка {Attempt} из {Total}): {Error}",
+                        model.Id,
+                        uri.Host,
+                        attempt,
+                        AttemptsPerSource,
+                        ex.Message);
+
+                    Report(model, ProgressOf(tempFile, model), $"Обрыв связи, повтор {attempt} из {AttemptsPerSource}");
+                    await Task.Delay(RetryDelay, cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
+
+        throw lastError ?? new HttpRequestException("Не удалось скачать модель ни с одного источника.");
+    }
+
+    private async Task DownloadFromSourceAsync(ModelDescriptor model, Uri uri, string tempFile, CancellationToken cancellationToken)
+    {
+        // Уже скачанная часть переиспользуется: сервер продолжит с этого места,
+        // если поддерживает Range, иначе файл будет перезаписан целиком.
+        var existing = File.Exists(tempFile) ? new FileInfo(tempFile).Length : 0;
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        if (existing > 0)
+        {
+            request.Headers.Range = new RangeHeaderValue(existing, null);
+        }
+
+        using var headersTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        headersTimeout.CancelAfter(HeadersTimeout);
+
         using var response = await _httpClient
-            .GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+            .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, headersTimeout.Token)
             .ConfigureAwait(false);
 
         response.EnsureSuccessStatusCode();
 
-        var total = response.Content.Headers.ContentLength ?? model.ApproximateSizeBytes;
-        long received = 0;
+        var resumed = response.StatusCode == System.Net.HttpStatusCode.PartialContent;
+        var received = resumed ? existing : 0;
+        var total = resumed
+            ? existing + (response.Content.Headers.ContentLength ?? 0)
+            : response.Content.Headers.ContentLength ?? model.ApproximateSizeBytes;
 
         await using var source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        await using var destination = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
+        await using var destination = new FileStream(
+            tempFile,
+            resumed ? FileMode.Append : FileMode.Create,
+            FileAccess.Write,
+            FileShare.None,
+            81920,
+            useAsync: true);
 
         var buffer = new byte[81920];
-        int read;
-        while ((read = await source.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
+        var startedAt = DateTimeOffset.UtcNow;
+        var startedFrom = received;
+        var lastReport = DateTimeOffset.MinValue;
+
+        while (true)
         {
+            // Каждое чтение ограничено по времени: иначе замолчавший сервер
+            // держал бы загрузку «в процессе» бесконечно.
+            using var stallTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            stallTimeout.CancelAfter(StallTimeout);
+
+            var read = await source.ReadAsync(buffer, stallTimeout.Token).ConfigureAwait(false);
+            if (read == 0)
+            {
+                break;
+            }
+
             await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
             received += read;
 
+            // Событий на каждый блок в 80 КБ набегают десятки тысяч, и очередь
+            // диспетчера UI перестаёт успевать — отчёт ограничен по частоте.
+            var now = DateTimeOffset.UtcNow;
+            if (now - lastReport < ReportInterval)
+            {
+                continue;
+            }
+
+            lastReport = now;
+            var elapsed = (now - startedAt).TotalSeconds;
+            var speed = elapsed > 0 ? (received - startedFrom) / elapsed : 0;
+
             // Загрузка занимает 0.9 шкалы, остальное — проверка и распаковка.
-            Report(model, total > 0 ? Math.Min(0.9, (double)received / total * 0.9) : 0, "Загрузка");
+            Report(
+                model,
+                total > 0 ? Math.Min(0.9, (double)received / total * 0.9) : 0,
+                $"Загрузка {Megabytes(received)} из {Megabytes(total)} МБ, {Megabytes((long)speed)} МБ/с");
         }
     }
+
+    private double ProgressOf(string tempFile, ModelDescriptor model)
+    {
+        if (!File.Exists(tempFile) || model.ApproximateSizeBytes <= 0)
+        {
+            return 0;
+        }
+
+        return Math.Min(0.9, (double)new FileInfo(tempFile).Length / model.ApproximateSizeBytes * 0.9);
+    }
+
+    private static string Megabytes(long bytes) => (bytes / 1024.0 / 1024).ToString("0.0");
 
     private static async Task<string> ComputeSha256Async(string path, CancellationToken cancellationToken)
     {

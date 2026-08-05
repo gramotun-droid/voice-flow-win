@@ -30,6 +30,17 @@ public enum LiveTextMode
 
     /// <summary>В поле уходит и хвост; при изменении гипотезы приложение стирает собственный хвост.</summary>
     MaximumLive,
+
+    /// <summary>
+    /// Пока идёт речь, поле не трогается: фраза целиком вставляется после паузы.
+    /// </summary>
+    /// <remarks>
+    /// Самый предсказуемый режим. Приложение ничего не переписывает в чужом
+    /// поле и не может ни оставить в нём промежуточную гипотезу, ни потерять
+    /// окончание фразы: текст появляется один раз и сразу проверенным Whisper.
+    /// Плата — задержка: слова видны в overlay, а в поле попадают после паузы.
+    /// </remarks>
+    InsertAfterPause,
 }
 
 public enum TextInjectionMode
@@ -82,7 +93,7 @@ public sealed class GeneralSettings
 
     public LanguageSelectionMode LanguageMode { get; set; } = LanguageSelectionMode.FollowKeyboardLayout;
 
-    public LiveTextMode LiveTextMode { get; set; } = LiveTextMode.SafeStreaming;
+    public LiveTextMode LiveTextMode { get; set; } = LiveTextMode.InsertAfterPause;
 
     public bool AutomaticPunctuation { get; set; } = true;
 

@@ -66,13 +66,25 @@
                         <RadioButton GroupName="Language" Content="Автоопределение Whisper"
                                      IsChecked="{Binding Draft.General.LanguageMode, Converter={StaticResource EnumMatch}, ConverterParameter=WhisperAutoDetect}" />
 
-                        <TextBlock Text="Живой ввод" Style="{StaticResource SectionHeader}" />
-                        <RadioButton GroupName="Live" Content="Безопасный режим — в поле уходят только стабильные слова"
+                        <TextBlock Text="Как текст попадает в поле" Style="{StaticResource SectionHeader}" />
+
+                        <RadioButton GroupName="Live" Content="Вставлять фразу целиком после паузы"
+                                     IsChecked="{Binding Draft.General.LiveTextMode, Converter={StaticResource EnumMatch}, ConverterParameter=InsertAfterPause}" />
+                        <TextBlock Style="{StaticResource MutedText}" Margin="22,0,0,6"
+                                   Text="Пока идёт речь, поле не трогается: слова видны только в overlay. После паузы фраза вставляется один раз и сразу проверенной Whisper." />
+
+                        <RadioButton GroupName="Live" Content="Печатать по мере речи, только стабильные слова"
                                      IsChecked="{Binding Draft.General.LiveTextMode, Converter={StaticResource EnumMatch}, ConverterParameter=SafeStreaming}" />
-                        <RadioButton GroupName="Live" Content="Максимально живой — вводится и изменяемый хвост"
+                        <TextBlock Style="{StaticResource MutedText}" Margin="22,0,0,6"
+                                   Text="Текст появляется во время речи, изменяемый хвост остаётся в overlay, а готовую фразу приложение заменяет на исправленную." />
+
+                        <RadioButton GroupName="Live" Content="Печатать всё, включая изменяемый хвост"
                                      IsChecked="{Binding Draft.General.LiveTextMode, Converter={StaticResource EnumMatch}, ConverterParameter=MaximumLive}" />
-                        <TextBlock Style="{StaticResource MutedText}"
-                                   Text="Живой режим переписывает собственный хвост нажатиями Backspace и совместим не со всеми приложениями." />
+                        <TextBlock Style="{StaticResource MutedText}" Margin="22,0,0,0"
+                                   Text="Самый живой и самый рискованный: хвост переписывается нажатиями Backspace, что совместимо не со всеми приложениями." />
+
+                        <TextBlock Style="{StaticResource MutedText}" Margin="0,8,0,0"
+                                   Text="Длительность паузы, после которой фраза считается законченной, задаётся на вкладке «Микрофон»." />
 
                         <TextBlock Text="Прочее" Style="{StaticResource SectionHeader}" />
                         <CheckBox Content="Запускать вместе с Windows" IsChecked="{Binding Draft.General.StartWithWindows}" />

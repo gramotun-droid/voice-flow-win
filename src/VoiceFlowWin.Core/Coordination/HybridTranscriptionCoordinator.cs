@@ -155,11 +155,19 @@ public sealed class HybridTranscriptionCoordinator
         var update = context.Prefix.Process(hypothesis, now);
         context.Segment.RecordHypothesis(update.FullText, update.StableText, update.VolatileTail);
 
-        var visibleText = _settings.Current.General.LiveTextMode == LiveTextMode.MaximumLive
-            ? update.FullText
-            : update.StableText;
+        var liveTextMode = _settings.Current.General.LiveTextMode;
 
-        await SyncInjectionAsync(context, PrepareInterimText(context, visibleText), cancellationToken).ConfigureAwait(false);
+        // Во время речи поле не трогается вовсе: фраза попадёт в него один раз
+        // и уже проверенной. Пользователь видит распознанное в overlay.
+        if (liveTextMode != LiveTextMode.InsertAfterPause)
+        {
+            var visibleText = liveTextMode == LiveTextMode.MaximumLive
+                ? update.FullText
+                : update.StableText;
+
+            await SyncInjectionAsync(context, PrepareInterimText(context, visibleText), cancellationToken).ConfigureAwait(false);
+        }
+
         SegmentUpdated?.Invoke(this, new SegmentEventArgs(context.Segment));
     }
 
@@ -178,7 +186,13 @@ public sealed class HybridTranscriptionCoordinator
         context.Segment.RecordHypothesis(update.StableText, update.StableText, string.Empty);
         context.Segment.SetAudio(audio);
 
-        await SyncInjectionAsync(context, PrepareInterimText(context, update.StableText), cancellationToken).ConfigureAwait(false);
+        // В режиме вставки после паузы текст Vosk в поле не попадает: его
+        // задача — показать речь в overlay, а в поле уйдёт результат Whisper.
+        // Если Whisper не справится, текст Vosk вставит обработчик отказа.
+        if (_settings.Current.General.LiveTextMode != LiveTextMode.InsertAfterPause)
+        {
+            await SyncInjectionAsync(context, PrepareInterimText(context, update.StableText), cancellationToken).ConfigureAwait(false);
+        }
 
         context.Segment.MarkAwaitingFinalization(DateTimeOffset.UtcNow);
         _sessionText = context.ContextBefore + context.Segment.InjectedText;
@@ -198,6 +212,21 @@ public sealed class HybridTranscriptionCoordinator
 
         if (!result.Succeeded)
         {
+            // В режиме вставки после паузы в поле ещё ничего нет, и отказ
+            // Whisper означал бы потерю фразы целиком. Вставляем то, что
+            // услышал Vosk: хуже по качеству, но лучше, чем ничего.
+            if (IsDeferredInsert && segment.InjectedLength == 0 && segment.StableText.Length > 0)
+            {
+                var fallback = PrepareInterimText(context, segment.StableText);
+                if (await SyncInjectionAsync(context, fallback, cancellationToken).ConfigureAwait(false))
+                {
+                    segment.MarkFinalized(context.Separator + fallback);
+                    _sessionText = context.ContextBefore + segment.InjectedText;
+                    SegmentUpdated?.Invoke(this, new SegmentEventArgs(segment));
+                    return;
+                }
+            }
+
             segment.MarkFailed(result.Error ?? "Whisper не смог обработать сегмент.");
             SegmentUpdated?.Invoke(this, new SegmentEventArgs(segment));
             return;
@@ -213,7 +242,9 @@ public sealed class HybridTranscriptionCoordinator
 
         var injectionSettings = _settings.Current.Injection;
 
-        if (!injectionSettings.SafeFinalReplacement)
+        // Запрет автоматической замены защищает уже введённый текст. Если в поле
+        // ничего не вводилось, заменять нечего — это обычная вставка.
+        if (!injectionSettings.SafeFinalReplacement && segment.InjectedLength > 0)
         {
             segment.MarkFrozenWithResult(finalText);
             ReplacementBlocked?.Invoke(this, new ReplacementBlockedEventArgs(segment, finalText, "Автоматическая замена отключена в настройках."));
@@ -341,6 +372,10 @@ public sealed class HybridTranscriptionCoordinator
             ? _sessionText
             : string.Join(' ', words[^whisperSettings.MaxContextWords..]);
     }
+
+    /// <summary>Фраза вставляется целиком после паузы, а не по мере речи.</summary>
+    private bool IsDeferredInsert =>
+        _settings.Current.General.LiveTextMode == LiveTextMode.InsertAfterPause;
 
     private string PrepareInterimText(SegmentContext context, string rawText)
     {

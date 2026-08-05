@@ -67,6 +67,48 @@ public sealed class SettingsMigrationTests : IDisposable
     }
 
     [Fact]
+    public void Прежний_режим_ввода_переносится_на_вставку_после_паузы()
+    {
+        WriteSettings("""{ "schemaVersion": 2, "general": { "liveTextMode": "SafeStreaming" } }""");
+
+        var settings = new SettingsService(_paths).Load();
+
+        Assert.Equal(LiveTextMode.InsertAfterPause, settings.General.LiveTextMode);
+        Assert.Equal(SettingsService.CurrentSchemaVersion, settings.SchemaVersion);
+    }
+
+    [Fact]
+    public void Выбранный_пользователем_режим_ввода_не_меняется()
+    {
+        WriteSettings("""{ "schemaVersion": 2, "general": { "liveTextMode": "MaximumLive" } }""");
+
+        var settings = new SettingsService(_paths).Load();
+
+        Assert.Equal(LiveTextMode.MaximumLive, settings.General.LiveTextMode);
+    }
+
+    [Fact]
+    public void Перенос_режима_не_трогает_уже_перенесённое_сочетание()
+    {
+        // Файл второй версии сочетание уже получил, второй раз его менять
+        // нельзя: пользователь мог сознательно вернуть прежнее.
+        WriteSettings("""
+            {
+              "schemaVersion": 2,
+              "general": {
+                "hotkey": { "virtualKey": 32, "modifiers": "Control, Alt" },
+                "liveTextMode": "SafeStreaming"
+              }
+            }
+            """);
+
+        var settings = new SettingsService(_paths).Load();
+
+        Assert.Equal(HotkeyDefinition.LegacyDefault, settings.General.Hotkey);
+        Assert.Equal(LiveTextMode.InsertAfterPause, settings.General.LiveTextMode);
+    }
+
+    [Fact]
     public void Новая_установка_сразу_на_текущей_схеме()
     {
         var settings = new SettingsService(_paths).Load();
@@ -74,6 +116,8 @@ public sealed class SettingsMigrationTests : IDisposable
         Assert.Equal(SettingsService.CurrentSchemaVersion, settings.SchemaVersion);
         Assert.Equal(HotkeyDefinition.Default, settings.General.Hotkey);
     }
+
+    private void WriteSettings(string json) => File.WriteAllText(_paths.SettingsFile, json);
 
     private void WriteLegacySettings(int virtualKey, string modifiers) =>
         File.WriteAllText(

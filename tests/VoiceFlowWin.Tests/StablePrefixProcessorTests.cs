@@ -123,6 +123,25 @@ public class StablePrefixProcessorTests
         Assert.Equal(string.Empty, update.VolatileTail);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public void Finalize_с_пустым_результатом_не_теряет_хвост(string? finalText)
+    {
+        // Vosk часто отдаёт пустой финальный результат: все слова уже пришли
+        // промежуточными гипотезами. Хвост при этом виден только в overlay,
+        // и потерять его — значит проглотить окончание фразы.
+        var processor = Create(repeats: 1, tailWords: 2);
+
+        processor.Process("нам нужно разработать новую систему", Start);
+        var update = processor.Finalize(finalText, Start.AddMilliseconds(300));
+
+        Assert.Equal("нам нужно разработать новую систему", update.StableText);
+        Assert.Equal("новую систему", update.NewStableText);
+        Assert.Equal(string.Empty, update.VolatileTail);
+    }
+
     [Fact]
     public void Finalize_короче_префикса_ничего_не_удаляет()
     {

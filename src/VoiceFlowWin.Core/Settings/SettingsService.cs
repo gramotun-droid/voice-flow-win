@@ -60,7 +60,7 @@ public sealed class SettingsService : ISettingsService
     public event EventHandler<AppSettings>? SettingsChanged;
 
     /// <summary>Текущая версия схемы настроек.</summary>
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
 
     public AppSettings Load()
     {
@@ -121,12 +121,22 @@ public sealed class SettingsService : ISettingsService
 
         // Версии до второй писали сочетание Ctrl + Alt + Space. Тому, кто его
         // не менял, отдаём новое умолчание Ctrl + F5.
-        if (settings.General.Hotkey == HotkeyDefinition.LegacyDefault)
+        if (settings.SchemaVersion < 2 && settings.General.Hotkey == HotkeyDefinition.LegacyDefault)
         {
             settings.General.Hotkey = HotkeyDefinition.Default;
             _logger.LogInformation(
                 "Сочетание вызова перенесено на {Hotkey}.",
                 HotkeyDefinition.Default.ToDisplayString());
+        }
+
+        // До третьей версии текст вводился по мере речи, и это оказалось
+        // источником почти всех проблем: промежуточные гипотезы в чужом поле,
+        // потерянные окончания фраз, ложные признаки ручной правки. Тому, кто
+        // режим не менял, отдаём вставку после паузы.
+        if (settings.SchemaVersion < 3 && settings.General.LiveTextMode == LiveTextMode.SafeStreaming)
+        {
+            settings.General.LiveTextMode = LiveTextMode.InsertAfterPause;
+            _logger.LogInformation("Режим ввода перенесён на вставку фразы после паузы.");
         }
 
         settings.SchemaVersion = CurrentSchemaVersion;

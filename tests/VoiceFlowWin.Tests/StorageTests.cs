@@ -62,7 +62,9 @@ public sealed class StorageTests : IDisposable
 
         Assert.Equal(HotkeyDefinition.Default, settings.General.Hotkey);
         Assert.Equal(EscapeBehavior.FinalizeAndKeep, settings.General.EscapeBehavior);
-        Assert.Equal(LiveTextMode.SafeStreaming, settings.General.LiveTextMode);
+        // По умолчанию поле не трогается во время речи: фраза вставляется
+        // целиком после паузы.
+        Assert.Equal(LiveTextMode.InsertAfterPause, settings.General.LiveTextMode);
         Assert.Equal(LanguageSelectionMode.FollowKeyboardLayout, settings.General.LanguageMode);
 
         // Конфиденциальность: по умолчанию ничего не хранится.

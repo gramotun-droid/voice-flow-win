@@ -16,13 +16,18 @@ public class HybridTranscriptionCoordinatorTests
 
     private sealed class Harness
     {
-        public Harness()
+        /// <summary>
+        /// Режим ввода задаётся явно: сценарии потокового ввода проверяют именно
+        /// его, а умолчанием стала вставка фразы после паузы.
+        /// </summary>
+        public Harness(LiveTextMode mode = LiveTextMode.SafeStreaming)
         {
             Field = new FakeTextField();
             Injection = new FakeInjectionService(Field);
             Tracker = new FakeFocusTracker();
             Monitor = new FakeInterventionMonitor(Tracker);
             Settings = new FakeSettingsService();
+            Settings.Mutate(current => current.General.LiveTextMode = mode);
             Coordinator = new HybridTranscriptionCoordinator(
                 Injection,
                 Tracker,
@@ -80,6 +85,56 @@ public class HybridTranscriptionCoordinatorTests
             "разработать новую систему распознавания");
 
         Assert.Equal("Разработать новую систему распознавания", harness.Field.Content);
+    }
+
+    [Fact]
+    public async Task Вставка_после_паузы_не_трогает_поле_во_время_речи()
+    {
+        var harness = new Harness(LiveTextMode.InsertAfterPause);
+
+        var segment = await harness.DictateAsync(
+            new[] { "нам нужно", "нам нужно разработать", "нам нужно разработать систему" },
+            "нам нужно разработать систему");
+
+        // Пока Whisper не ответил, в поле не должно быть ничего: пользователь
+        // видит распознанное только в overlay.
+        Assert.Equal(string.Empty, harness.Field.Content);
+        Assert.Equal("нам нужно разработать систему", segment.StableText);
+
+        await harness.ApplyWhisperAsync(segment.SegmentId, "Нам нужно разработать систему.");
+
+        Assert.Equal("Нам нужно разработать систему.", harness.Field.Content);
+        Assert.Equal(SegmentState.Finalized, segment.State);
+    }
+
+    [Fact]
+    public async Task Вставка_после_паузы_переживает_отказ_Whisper()
+    {
+        var harness = new Harness(LiveTextMode.InsertAfterPause);
+
+        var segment = await harness.DictateAsync(new[] { "фраза целиком" }, "фраза целиком");
+
+        await harness.Coordinator.ApplyFinalRecognitionAsync(
+            FinalRecognitionResult.Failure(segment.SegmentId, "модель не загружена", TimeSpan.Zero),
+            CancellationToken.None);
+
+        // Терять фразу нельзя: в поле уходит то, что услышал Vosk.
+        Assert.Equal("Фраза целиком", harness.Field.Content);
+        Assert.Equal(SegmentState.Finalized, segment.State);
+    }
+
+    [Fact]
+    public async Task Вставка_после_паузы_не_дописывает_фразу_дважды()
+    {
+        var harness = new Harness(LiveTextMode.InsertAfterPause);
+
+        var first = await harness.DictateAsync(new[] { "первая фраза" }, "первая фраза");
+        await harness.ApplyWhisperAsync(first.SegmentId, "Первая фраза.");
+
+        var second = await harness.DictateAsync(new[] { "вторая фраза" }, "вторая фраза");
+        await harness.ApplyWhisperAsync(second.SegmentId, "Вторая фраза.");
+
+        Assert.Equal("Первая фраза. Вторая фраза.", harness.Field.Content);
     }
 
     [Fact]

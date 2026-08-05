@@ -67,6 +67,9 @@ public sealed class DictationController : IAsyncDisposable
     private readonly Task _pump;
 
     private long? _currentSegmentId;
+
+    /// <summary>Окно, в котором началась текущая диктовка.</summary>
+    private WindowFocusSnapshot _sessionFocus = WindowFocusSnapshot.Unknown;
     private bool _disposed;
 
     public DictationController(
@@ -196,7 +199,8 @@ public sealed class DictationController : IAsyncDisposable
 
         try
         {
-            var focus = _focusTracker.Capture();
+            var focus = CaptureTargetFocus();
+            _sessionFocus = focus;
             var language = ResolveLanguage(focus);
             await _streaming.PrepareAsync(language, cancellationToken).ConfigureAwait(false);
 
@@ -378,10 +382,31 @@ public sealed class DictationController : IAsyncDisposable
             return existing;
         }
 
-        var focus = _focusTracker.Capture();
+        var focus = CaptureTargetFocus();
         var segment = _coordinator.BeginSegment(ResolveLanguage(focus), focus);
         _currentSegmentId = segment.SegmentId;
         return segment.SegmentId;
+    }
+
+    /// <summary>Снимок окна, в которое идёт диктовка.</summary>
+    /// <remarks>
+    /// Собственные окна приложения целью диктовки быть не могут. Проверка не
+    /// теоретическая: overlay показывается ровно в момент начала диктовки, и
+    /// когда снимок попадал на него, язык сегмента определялся по раскладке
+    /// нашего же окна — русская речь уходила в Whisper как английская. По той
+    /// же причине от него нельзя отсчитывать вмешательство пользователя.
+    /// </remarks>
+    internal WindowFocusSnapshot CaptureTargetFocus()
+    {
+        var focus = _focusTracker.Capture();
+
+        var isOwnWindow = focus.WindowHandle != 0 && focus.ProcessId == Environment.ProcessId;
+        if ((isOwnWindow || focus.WindowHandle == 0) && _sessionFocus.WindowHandle != 0)
+        {
+            return _sessionFocus;
+        }
+
+        return focus;
     }
 
     private void Post(Func<CancellationToken, Task> work)

@@ -74,7 +74,7 @@ public sealed class ModelItemViewModel : ObservableObject
 /// прямо посреди диктовки. Горячая клавиша после сохранения перерегистрируется
 /// без перезапуска приложения.
 /// </remarks>
-public sealed class SettingsViewModel : ObservableObject
+public sealed class SettingsViewModel : ObservableObject, IDisposable
 {
     private readonly ISettingsService _settingsService;
     private readonly IDictionaryStore _dictionaryStore;
@@ -136,6 +136,7 @@ public sealed class SettingsViewModel : ObservableObject
 
         _models.Progress += OnModelProgress;
         _updates.StatusChanged += OnUpdateStatusChanged;
+        _settingsService.SettingsChanged += OnSettingsChangedOutside;
     }
 
     /// <summary>Копия настроек, с которой работает окно.</summary>
@@ -458,6 +459,48 @@ public sealed class SettingsViewModel : ObservableObject
             StatusMessage = "Не удалось запустить установку. Текущая версия продолжает работать.";
         }
     }
+
+    public void Dispose()
+    {
+        _models.Progress -= OnModelProgress;
+        _updates.StatusChanged -= OnUpdateStatusChanged;
+        _settingsService.SettingsChanged -= OnSettingsChangedOutside;
+        _modelDownload?.Dispose();
+    }
+
+    /// <summary>
+    /// Подхватывает изменения настроек, сделанные мимо окна.
+    /// </summary>
+    /// <remarks>
+    /// Модели докачиваются в фоне и прописывают свои пути прямо в настройки.
+    /// Окно работает с копией, поэтому без этого поля на вкладке
+    /// «Распознавание» оставались пустыми до перезапуска приложения, хотя
+    /// модель уже была скачана и работала. Переносятся только пути и состояние
+    /// моделей: остальные правки черновика — незавершённая работа пользователя,
+    /// и затирать её нельзя.
+    /// </remarks>
+    private void OnSettingsChangedOutside(object? sender, AppSettings settings) =>
+        Application.Current?.Dispatcher.BeginInvoke(() =>
+        {
+            var changed =
+                Draft.Vosk.RussianModelPath != settings.Vosk.RussianModelPath ||
+                Draft.Vosk.EnglishModelPath != settings.Vosk.EnglishModelPath ||
+                Draft.Whisper.ModelPath != settings.Whisper.ModelPath;
+
+            if (changed)
+            {
+                Draft.Vosk.RussianModelPath = settings.Vosk.RussianModelPath;
+                Draft.Vosk.EnglishModelPath = settings.Vosk.EnglishModelPath;
+                Draft.Whisper.ModelPath = settings.Whisper.ModelPath;
+                Draft.Whisper.ModelId = settings.Whisper.ModelId;
+                OnPropertyChanged(nameof(Draft));
+            }
+
+            foreach (var item in Models)
+            {
+                item.IsInstalled = _models.IsInstalled(item.Descriptor);
+            }
+        });
 
     private void OnModelProgress(object? sender, ModelProgressEventArgs e)
     {

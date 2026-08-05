@@ -28,6 +28,17 @@ public partial class SettingsWindow : Window
     public void SelectModelsTab() => Tabs.SelectedItem = ModelsTab;
 
     /// <summary>
+    /// Окно создаётся заново при каждом открытии, поэтому его модель обязана
+    /// отписаться от событий приложения: иначе закрытые окна продолжали бы
+    /// обрабатывать загрузку моделей и проверку обновлений.
+    /// </summary>
+    protected override void OnClosed(EventArgs e)
+    {
+        _viewModel.Dispose();
+        base.OnClosed(e);
+    }
+
+    /// <summary>
     /// Захват сочетания клавиш.
     /// </summary>
     /// <remarks>

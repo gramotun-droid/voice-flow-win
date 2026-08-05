@@ -130,6 +130,23 @@ public sealed class VoiceCommandProcessor
         return new VoiceCommandResult(Join(output), deleteRequests, cancelRequested);
     }
 
+    /// <summary>Действует ли команда в сегменте с таким языком.</summary>
+    /// <remarks>
+    /// Русские команды принимаются в любом сегменте. Язык сегмента берётся из
+    /// раскладки активного окна, а диктовать по-русски в окне с английской
+    /// раскладкой — обычное дело: раньше «точка» и «запятая» там просто не
+    /// срабатывали. Кириллическое слово английская модель выдать не может, так
+    /// что спутать его с речью нельзя.
+    ///
+    /// Английские команды остаются привязанными к языку: «period» и «comma» —
+    /// обычные слова, а английские термины внутри русской речи приложение
+    /// сохраняет намеренно.
+    /// </remarks>
+    private static bool AppliesTo(VoiceCommand command, RecognitionLanguage language) =>
+        command.Language == RecognitionLanguage.Russian ||
+        language == RecognitionLanguage.Auto ||
+        command.Language == language;
+
     private VoiceCommand? MatchAt(string[] tokens, int start, RecognitionLanguage language, out int matchedLength)
     {
         var available = Math.Min(_maxTokens, tokens.Length - start);
@@ -144,7 +161,7 @@ public sealed class VoiceCommandProcessor
                     continue;
                 }
 
-                if (language != RecognitionLanguage.Auto && command.Language != language)
+                if (!AppliesTo(command, language))
                 {
                     continue;
                 }

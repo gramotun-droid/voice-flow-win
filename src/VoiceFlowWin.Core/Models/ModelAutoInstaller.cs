@@ -44,7 +44,11 @@ public sealed class ModelAutoInstaller
 
         var installed = 0;
 
-        foreach (var model in ModelCatalog.All.OrderByDescending(item => item.Recommended))
+        var queue = ModelCatalog.All
+            .Where(item => item.AutoDownload)
+            .OrderByDescending(item => item.Recommended);
+
+        foreach (var model in queue)
         {
             if (cancellationToken.IsCancellationRequested)
             {

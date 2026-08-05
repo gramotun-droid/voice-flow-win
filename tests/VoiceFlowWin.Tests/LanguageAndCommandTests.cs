@@ -162,6 +162,16 @@ public class VoiceCommandProcessorTests
     [Fact]
     public void Команды_чужого_языка_не_срабатывают() =>
         Assert.Equal("привет comma мир", Processor.Process("привет comma мир", RecognitionLanguage.Russian).Text);
+
+    [Fact]
+    public void Русские_команды_работают_в_сегменте_с_английским_языком() =>
+        // Язык сегмента берётся из раскладки активного окна, а диктовать
+        // по-русски в окне с английской раскладкой — обычное дело.
+        Assert.Equal("привет, мир.", Processor.Process("привет запятая мир точка", RecognitionLanguage.English).Text);
+
+    [Fact]
+    public void Русские_команды_работают_при_автоопределении_языка() =>
+        Assert.Equal("раз два.", Processor.Process("раз два точка", RecognitionLanguage.Auto).Text);
 }
 
 public class TextNormalizerTests

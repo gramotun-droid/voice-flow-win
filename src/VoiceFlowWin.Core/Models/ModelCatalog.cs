@@ -17,7 +17,8 @@ public sealed record ModelDescriptor(
     string Requirements,
     bool Recommended,
     string? Sha256 = null,
-    IReadOnlyList<string>? FallbackUrls = null)
+    IReadOnlyList<string>? FallbackUrls = null,
+    bool AutoDownload = true)
 {
     /// <summary>Источники загрузки в порядке предпочтения.</summary>
     /// <remarks>
@@ -81,8 +82,12 @@ public static class ModelCatalog
             RecognitionLanguage.Russian,
             $"{VoskOrigin}/vosk-model-ru-0.42.zip",
             1800L * 1024 * 1024,
-            "Точнее, но требует около 4 ГБ памяти. Зеркала нет — качается только с сайта Vosk и может идти долго.",
-            Recommended: false),
+            "Точнее, но требует около 4 ГБ памяти. Зеркала нет: качается только с сайта Vosk, который часто отдаёт медленно, поэтому скачивание запускается вручную кнопкой «Скачать».",
+            Recommended: false,
+            // Единственный источник этой модели раздаёт её в разы медленнее
+            // остальных. В автоматической очереди она заняла бы её на часы,
+            // поэтому скачивается только по явной команде пользователя.
+            AutoDownload: false),
 
         new ModelDescriptor(
             "vosk-model-small-en-us-0.15",

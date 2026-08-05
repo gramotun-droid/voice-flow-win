@@ -16,6 +16,13 @@ internal static class Program
 {
     private static readonly TimeSpan ProcessWaitTimeout = TimeSpan.FromSeconds(30);
 
+    /// <summary>Сколько ждать окончания установки после запуска установщика.</summary>
+    private static readonly TimeSpan InstallWaitTimeout = TimeSpan.FromMinutes(5);
+
+    private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(500);
+
+    private static readonly TimeSpan FileReleaseDelay = TimeSpan.FromSeconds(2);
+
     private static int Main(string[] args)
     {
         var options = ParseArguments(args);
@@ -30,12 +37,62 @@ internal static class Program
 
         var installerExitCode = RunInstaller(options.InstallerPath);
 
-        if (options.RelaunchPath is not null && File.Exists(options.RelaunchPath))
+        // Inno Setup распаковывает себя во временный файл и продолжает работу
+        // уже в нём, поэтому запущенный процесс завершается задолго до конца
+        // установки. Без этого ожидания приложение поднималось поверх ещё
+        // идущей установки — и установщик его тут же закрывал.
+        WaitForInstallerToFinish(options.InstallerPath);
+
+        if (options.RelaunchPath is not null &&
+            File.Exists(options.RelaunchPath) &&
+            !IsApplicationRunning(options.RelaunchPath))
         {
             TryRelaunch(options.RelaunchPath);
         }
 
         return installerExitCode;
+    }
+
+    /// <summary>Ждёт, пока не останется процессов установщика.</summary>
+    private static void WaitForInstallerToFinish(string installerPath)
+    {
+        // Дочерний процесс Inno Setup наследует имя установщика, отличается
+        // только расширением, поэтому ищется по имени без него.
+        var name = Path.GetFileNameWithoutExtension(installerPath);
+        var deadline = DateTime.UtcNow + InstallWaitTimeout;
+
+        while (DateTime.UtcNow < deadline)
+        {
+            var running = Process.GetProcessesByName(name);
+            foreach (var process in running)
+            {
+                process.Dispose();
+            }
+
+            if (running.Length == 0)
+            {
+                // Файлам нужно мгновение, чтобы освободиться после замены.
+                Thread.Sleep(FileReleaseDelay);
+                return;
+            }
+
+            Thread.Sleep(PollInterval);
+        }
+
+        Console.Error.WriteLine("Установщик не завершился за отведённое время.");
+    }
+
+    /// <summary>Не поднимать второй экземпляр, если приложение уже запущено.</summary>
+    private static bool IsApplicationRunning(string relaunchPath)
+    {
+        var name = Path.GetFileNameWithoutExtension(relaunchPath);
+        var running = Process.GetProcessesByName(name);
+        foreach (var process in running)
+        {
+            process.Dispose();
+        }
+
+        return running.Length > 0;
     }
 
     private static void WaitForExit(int? processId)

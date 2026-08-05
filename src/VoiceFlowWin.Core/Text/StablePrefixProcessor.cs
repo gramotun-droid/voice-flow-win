@@ -136,7 +136,12 @@ public sealed class StablePrefixProcessor
     /// </summary>
     public StablePrefixUpdate Finalize(string? finalText, DateTimeOffset now)
     {
-        var tokens = Tokenize(finalText ?? CurrentHypothesis);
+        // Пустой финальный результат — обычное дело: Vosk уже отдал все слова
+        // промежуточными гипотезами. Принимать его буквально нельзя, иначе
+        // изменяемый хвост, который в безопасном режиме виден только в overlay,
+        // пропадёт вместе с окончанием фразы.
+        var source = string.IsNullOrWhiteSpace(finalText) ? CurrentHypothesis : finalText;
+        var tokens = Tokenize(source);
 
         // Финальный результат Vosk обычно точнее последней промежуточной
         // гипотезы, но подтверждённый префикс уже введён. Поэтому берём
@@ -151,13 +156,13 @@ public sealed class StablePrefixProcessor
                 newlyCommitted.Add(tokens[i]);
             }
 
-            CurrentHypothesis = finalText ?? CurrentHypothesis;
+            CurrentHypothesis = source;
             VolatileTail = string.Empty;
             return new StablePrefixUpdate(StableText, string.Empty, Join(newlyCommitted));
         }
 
         // Финальный текст короче уже подтверждённого — ничего не удаляем.
-        CurrentHypothesis = finalText ?? CurrentHypothesis;
+        CurrentHypothesis = source;
         VolatileTail = string.Empty;
         return new StablePrefixUpdate(StableText, string.Empty, string.Empty);
     }

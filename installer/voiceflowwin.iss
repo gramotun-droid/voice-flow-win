@@ -83,6 +83,11 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,VoiceFlowWin}"; Flags: nowait postinstall skipifsilent
 
+; Тихая установка — это обновление из самого приложения: там нет мастера с
+; галочкой «запустить», поэтому приложение поднимается установщиком, который
+; точно знает, что установка закончена.
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--minimized"; Flags: nowait; Check: WizardSilent
+
 ; Настройки, словарь и скачанные модели лежат в %LocalAppData%\VoiceFlowWin и
 ; при удалении программы сознательно не трогаются: пользователь не должен
 ; терять гигабайты моделей и свой словарь из-за переустановки.

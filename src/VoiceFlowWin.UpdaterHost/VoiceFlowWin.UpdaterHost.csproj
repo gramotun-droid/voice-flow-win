@@ -10,7 +10,6 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <RootNamespace>VoiceFlowWin.UpdaterHost</RootNamespace>
     <AssemblyName>VoiceFlowWin.UpdaterHost</AssemblyName>
-    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
   </PropertyGroup>
 

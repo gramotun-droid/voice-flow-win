@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Тесты Win32-слоя. Компилируются везде, но запускаются только на Windows —
+    CI выполняет их в job build-windows.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>VoiceFlowWin.Windows.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <UseWindowsForms>true</UseWindowsForms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\VoiceFlowWin.Core\VoiceFlowWin.Core.csproj" />
+    <ProjectReference Include="..\..\src\VoiceFlowWin.Windows\VoiceFlowWin.Windows.csproj" />
+  </ItemGroup>
+
+</Project>

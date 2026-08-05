@@ -1,0 +1,17 @@
+bin/
+obj/
+artifacts/
+publish/
+installer_output/
+*.user
+*.suo
+.vs/
+.idea/
+TestResults/
+*.binlog
+
+# Модели никогда не попадают в репозиторий: их скачивает Model Manager.
+models/
+*.gguf
+*.bin
+!**/testdata/*.bin

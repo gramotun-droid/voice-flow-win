@@ -1,0 +1,39 @@
+<Project>
+
+  <!--
+    Единственный источник версии продукта.
+
+    Локальная сборка использует значение отсюда. Release-workflow извлекает
+    SemVer из тега vMAJOR.MINOR.PATCH и передаёт его через -p:Version=...,
+    поэтому версию не нужно дублировать вручную ни в одном другом файле:
+    установщик, portable-архив и update-manifest.json получают ту же строку.
+  -->
+  <PropertyGroup>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <Product>VoiceFlowWin</Product>
+    <Company>gramotun</Company>
+    <Authors>gramotun</Authors>
+    <Copyright>Copyright (c) 2026 gramotun</Copyright>
+    <RepositoryUrl>https://github.com/gramotun-droid/voice-flow-win</RepositoryUrl>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <WarningsAsErrors>nullable</WarningsAsErrors>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <NeutralLanguage>ru-RU</NeutralLanguage>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <!-- Единая версия попадает в AssemblyVersion/FileVersion и в UI. -->
+  <PropertyGroup>
+    <AssemblyVersion>$(VersionPrefix).0</AssemblyVersion>
+    <FileVersion>$(VersionPrefix).0</FileVersion>
+  </PropertyGroup>
+
+</Project>

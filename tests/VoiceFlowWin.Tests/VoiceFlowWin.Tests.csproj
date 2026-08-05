@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Кроссплатформенные тесты: текст, сегменты, язык, словарь, обновления.
+    Реальный микрофон и Win32 API не нужны, поэтому набор целиком проходит
+    и на ubuntu-latest в CI, и локально.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>VoiceFlowWin.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="coverlet.collector" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\VoiceFlowWin.Core\VoiceFlowWin.Core.csproj" />
+    <ProjectReference Include="..\..\src\VoiceFlowWin.Audio\VoiceFlowWin.Audio.csproj" />
+    <ProjectReference Include="..\..\src\VoiceFlowWin.Updater\VoiceFlowWin.Updater.csproj" />
+  </ItemGroup>
+
+</Project>

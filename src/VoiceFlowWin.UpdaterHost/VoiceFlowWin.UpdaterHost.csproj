@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Отдельный маленький процесс, который переживает завершение основного
+    приложения: дожидается выхода VoiceFlowWin по PID, запускает проверенный
+    установщик и возвращает управление обратно приложению.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>VoiceFlowWin.UpdaterHost</RootNamespace>
+    <AssemblyName>VoiceFlowWin.UpdaterHost</AssemblyName>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\VoiceFlowWin.Core\VoiceFlowWin.Core.csproj" />
+    <ProjectReference Include="..\VoiceFlowWin.Updater\VoiceFlowWin.Updater.csproj" />
+  </ItemGroup>
+
+</Project>

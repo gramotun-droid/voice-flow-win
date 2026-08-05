@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>VoiceFlowWin.App</RootNamespace>
+    <AssemblyName>VoiceFlowWin</AssemblyName>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+    <SelfContained Condition="'$(SelfContained)' == ''">false</SelfContained>
+    <SatelliteResourceLanguages>en;ru</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\VoiceFlowWin.Core\VoiceFlowWin.Core.csproj" />
+    <ProjectReference Include="..\VoiceFlowWin.Audio\VoiceFlowWin.Audio.csproj" />
+    <ProjectReference Include="..\VoiceFlowWin.Vosk\VoiceFlowWin.Vosk.csproj" />
+    <ProjectReference Include="..\VoiceFlowWin.Whisper\VoiceFlowWin.Whisper.csproj" />
+    <ProjectReference Include="..\VoiceFlowWin.Windows\VoiceFlowWin.Windows.csproj" />
+    <ProjectReference Include="..\VoiceFlowWin.Updater\VoiceFlowWin.Updater.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Assets\app.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

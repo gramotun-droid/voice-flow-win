@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Whisper подключается библиотекой через Whisper.net (устойчивый native
+    wrapper над whisper.cpp). Отдельный консольный процесс на фразу не
+    запускается: модель загружается один раз и переиспользуется.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>VoiceFlowWin.WhisperEngine</RootNamespace>
+    <AssemblyName>VoiceFlowWin.Whisper</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Whisper.net" />
+    <PackageReference Include="Whisper.net.Runtime" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\VoiceFlowWin.Core\VoiceFlowWin.Core.csproj" />
+  </ItemGroup>
+
+</Project>

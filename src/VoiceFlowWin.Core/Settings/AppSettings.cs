@@ -215,7 +215,9 @@ public sealed class OverlaySettings
 
     public bool HideText { get; set; }
 
-    public double Left { get; set; } = double.NaN;
+    // null означает «положение ещё не выбрано»: NaN здесь не годится, потому
+    // что System.Text.Json отказывается его записывать и роняет сохранение.
+    public double? Left { get; set; }
 
-    public double Top { get; set; } = double.NaN;
+    public double? Top { get; set; }
 }

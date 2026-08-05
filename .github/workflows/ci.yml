@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Минимальные права: workflow только читает репозиторий.
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  # Кроссплатформенные тесты гоняются на Linux: они не требуют ни микрофона,
+  # ни Win32 API, поэтому дают быструю обратную связь на каждый PR.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-dotnet@87b7050bc53ea08284295505d98d2aa94301e852 # v4.2.0
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore VoiceFlowWin.sln
+
+      - name: Проверка форматирования
+        run: dotnet format VoiceFlowWin.sln --verify-no-changes --severity error --no-restore
+        continue-on-error: false
+
+      - name: Сборка Release
+        run: dotnet build VoiceFlowWin.sln --configuration Release --no-restore
+
+      - name: Тесты
+        run: >
+          dotnet test tests/VoiceFlowWin.Tests/VoiceFlowWin.Tests.csproj
+          --configuration Release --no-build
+          --logger "trx;LogFileName=core-tests.trx"
+          --results-directory TestResults
+
+      - name: Публикация результатов тестов
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: test-results-linux
+          path: TestResults
+          if-no-files-found: warn
+
+  # Windows-job проверяет то, что нельзя проверить на Linux: тесты Win32-слоя,
+  # реальный publish под win-x64 и сборку установщика.
+  build-windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-dotnet@87b7050bc53ea08284295505d98d2aa94301e852 # v4.2.0
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore VoiceFlowWin.sln
+
+      - name: Сборка Release
+        run: dotnet build VoiceFlowWin.sln --configuration Release --no-restore
+
+      - name: Тесты Windows-слоя
+        run: >
+          dotnet test tests/VoiceFlowWin.Windows.Tests/VoiceFlowWin.Windows.Tests.csproj
+          --configuration Release --no-build
+          --logger "trx;LogFileName=windows-tests.trx"
+          --results-directory TestResults
+
+      - name: Проверка publish для win-x64
+        run: >
+          dotnet publish src/VoiceFlowWin.App/VoiceFlowWin.App.csproj
+          --configuration Release --runtime win-x64 --self-contained false
+          --output publish
+
+      - name: Публикация updater
+        run: >
+          dotnet publish src/VoiceFlowWin.UpdaterHost/VoiceFlowWin.UpdaterHost.csproj
+          --configuration Release --runtime win-x64 --self-contained false
+          --output publish
+
+      - name: Установка Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Проверка сборки установщика
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $iscc /DMyAppVersion=0.0.0-ci installer\voiceflowwin.iss
+
+      - name: Диагностика при ошибке
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: diagnostics-windows
+          path: |
+            TestResults
+            publish
+            installer_output
+          if-no-files-found: warn
+
+      - name: Публикация результатов тестов
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: test-results-windows
+          path: TestResults
+          if-no-files-found: warn

@@ -9,6 +9,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Сборка INPUT-структур и разбор модификаторов проверяются тестами. -->
+    <InternalsVisibleTo Include="VoiceFlowWin.Windows.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="NAudio" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>

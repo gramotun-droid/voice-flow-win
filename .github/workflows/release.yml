@@ -1,0 +1,203 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Версия SemVer без префикса v (например 1.4.2)"
+        required: true
+        type: string
+
+# Право записи нужно только для создания релиза.
+permissions:
+  contents: write
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  release:
+    runs-on: windows-latest
+    # Секрет поднят в env на уровне job: в условии шага контекст secrets
+    # недоступен, а проверить наличие сертификата нужно именно там.
+    env:
+      SIGNING_CERTIFICATE: ${{ secrets.SIGNING_CERTIFICATE }}
+      SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-dotnet@87b7050bc53ea08284295505d98d2aa94301e852 # v4.2.0
+        with:
+          dotnet-version: "8.0.x"
+
+      # Единственный источник версии: тег. Она же уходит в сборку, установщик,
+      # имена артефактов и манифест обновления — руками нигде не дублируется.
+      - name: Определение версии
+        id: version
+        shell: pwsh
+        run: |
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            $version = '${{ inputs.version }}'
+          } else {
+            $version = '${{ github.ref_name }}' -replace '^v', ''
+          }
+
+          if ($version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.\-]+)?$') {
+            Write-Error "Версия '$version' не соответствует SemVer."
+            exit 1
+          }
+
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Версия выпуска: $version"
+
+      - name: Restore
+        run: dotnet restore VoiceFlowWin.sln
+
+      - name: Сборка Release
+        run: dotnet build VoiceFlowWin.sln --configuration Release --no-restore -p:Version=${{ steps.version.outputs.version }}
+
+      - name: Тесты
+        run: |
+          dotnet test tests/VoiceFlowWin.Tests/VoiceFlowWin.Tests.csproj --configuration Release --no-build
+          dotnet test tests/VoiceFlowWin.Windows.Tests/VoiceFlowWin.Windows.Tests.csproj --configuration Release --no-build
+
+      - name: Публикация приложения
+        run: >
+          dotnet publish src/VoiceFlowWin.App/VoiceFlowWin.App.csproj
+          --configuration Release --runtime win-x64 --self-contained false
+          --output publish -p:Version=${{ steps.version.outputs.version }}
+
+      - name: Публикация updater
+        run: >
+          dotnet publish src/VoiceFlowWin.UpdaterHost/VoiceFlowWin.UpdaterHost.csproj
+          --configuration Release --runtime win-x64 --self-contained false
+          --output publish -p:Version=${{ steps.version.outputs.version }}
+
+      - name: Portable-архив
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          Compress-Archive -Path publish\* -DestinationPath "artifacts\VoiceFlowWin-Portable-x64-${{ steps.version.outputs.version }}.zip"
+
+      - name: Установка Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Сборка установщика
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $iscc /DMyAppVersion=${{ steps.version.outputs.version }} installer\voiceflowwin.iss
+          Copy-Item "installer_output\VoiceFlowWin-Setup-x64-${{ steps.version.outputs.version }}.exe" artifacts\
+
+      # Подпись выполняется только при наличии сертификата в секретах.
+      # Без него сборка не падает, но помечается как unsigned.
+      - name: Подпись артефактов
+        id: sign
+        if: ${{ env.SIGNING_CERTIFICATE != '' }}
+        shell: pwsh
+        run: |
+          $bytes = [Convert]::FromBase64String($env:SIGNING_CERTIFICATE)
+          $pfx = Join-Path $env:RUNNER_TEMP 'signing.pfx'
+          [IO.File]::WriteAllBytes($pfx, $bytes)
+
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+            Where-Object { $_.FullName -like '*x64*' } | Select-Object -First 1
+
+          & $signtool.FullName sign /f $pfx /p $env:SIGNING_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 `
+            "artifacts\VoiceFlowWin-Setup-x64-${{ steps.version.outputs.version }}.exe"
+
+          Remove-Item $pfx -Force
+          "signed=true" >> $env:GITHUB_OUTPUT
+
+      - name: Контрольные суммы
+        id: checksums
+        shell: pwsh
+        run: |
+          $lines = @()
+          $installerHash = ''
+          $installerSize = 0
+
+          Get-ChildItem artifacts -File | Sort-Object Name | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+            $lines += "$hash  $($_.Name)"
+            if ($_.Extension -eq '.exe') {
+              $installerHash = $hash
+              $installerSize = $_.Length
+            }
+          }
+
+          $lines | Set-Content artifacts\checksums.txt -Encoding utf8
+          "installer_sha256=$installerHash" >> $env:GITHUB_OUTPUT
+          "installer_size=$installerSize" >> $env:GITHUB_OUTPUT
+
+      - name: SBOM и список лицензий
+        shell: pwsh
+        run: |
+          dotnet tool install --global CycloneDX --version 5.4.0
+          dotnet CycloneDX VoiceFlowWin.sln --output artifacts --filename sbom.spdx.json --json
+
+          # Список лицензий собирается из метаданных восстановленных пакетов.
+          $licenses = @('Сторонние компоненты VoiceFlowWin', '')
+          $packages = @(
+            'Vosk (Apache-2.0) — потоковое распознавание речи',
+            'Whisper.net и Whisper.net.Runtime (MIT) — обёртка whisper.cpp',
+            'whisper.cpp (MIT) — финальное распознавание',
+            'NAudio (MIT) — захват звука через WASAPI',
+            'Microsoft.Extensions.* (MIT) — внедрение зависимостей и логирование',
+            'xunit (Apache-2.0) — тесты'
+          )
+          $licenses += $packages
+          $licenses | Set-Content artifacts\THIRD-PARTY-LICENSES.txt -Encoding utf8
+
+      - name: Манифест обновления
+        shell: pwsh
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          $base = "https://github.com/${{ github.repository }}/releases/download/v$version"
+          $signed = '${{ steps.sign.outputs.signed }}' -eq 'true'
+
+          $manifest = [ordered]@{
+            version                 = $version
+            minimumSupportedVersion = '0.1.0'
+            releaseDate             = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+            installerUrl            = "$base/VoiceFlowWin-Setup-x64-$version.exe"
+            portableUrl             = "$base/VoiceFlowWin-Portable-x64-$version.zip"
+            sha256                  = '${{ steps.checksums.outputs.installer_sha256 }}'
+            size                    = [long]'${{ steps.checksums.outputs.installer_size }}'
+            mandatory               = $false
+            releaseNotesUrl         = "https://github.com/${{ github.repository }}/releases/tag/v$version"
+            unsigned                = -not $signed
+          }
+
+          $manifest | ConvertTo-Json | Set-Content artifacts\update-manifest.json -Encoding utf8
+
+      - name: Создание GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          $notes = @"
+          Выпуск VoiceFlowWin $version.
+
+          Установка: скачайте VoiceFlowWin-Setup-x64-$version.exe и запустите его.
+          Портативный вариант: распакуйте VoiceFlowWin-Portable-x64-$version.zip и запустите VoiceFlowWin.exe.
+
+          Модели распознавания в установщик не входят — при первом запуске приложение предложит их скачать.
+          Проверить целостность файлов можно по checksums.txt.
+          "@
+
+          $prerelease = if ($version -match '-') { '--prerelease' } else { '' }
+          gh release create "v$version" (Get-ChildItem artifacts -File | ForEach-Object { $_.FullName }) `
+            --title "VoiceFlowWin $version" --notes $notes $prerelease
+
+      - name: Артефакты сборки
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-artifacts
+          path: artifacts
+          if-no-files-found: error

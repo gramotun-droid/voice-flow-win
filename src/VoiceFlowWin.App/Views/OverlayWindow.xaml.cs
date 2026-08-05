@@ -70,7 +70,7 @@ public partial class OverlayWindow : Window
         var overlay = _settings.Current.Overlay;
         var workArea = SystemParameters.WorkArea;
 
-        if (double.IsNaN(overlay.Left) || double.IsNaN(overlay.Top))
+        if (overlay.Left is not { } savedLeft || overlay.Top is not { } savedTop)
         {
             Left = workArea.Right - Width - 24;
             Top = workArea.Bottom - 220;
@@ -78,8 +78,8 @@ public partial class OverlayWindow : Window
         }
 
         // Окно могло остаться за пределами экрана после смены разрешения.
-        Left = Math.Clamp(overlay.Left, workArea.Left, Math.Max(workArea.Left, workArea.Right - Width));
-        Top = Math.Clamp(overlay.Top, workArea.Top, Math.Max(workArea.Top, workArea.Bottom - 100));
+        Left = Math.Clamp(savedLeft, workArea.Left, Math.Max(workArea.Left, workArea.Right - Width));
+        Top = Math.Clamp(savedTop, workArea.Top, Math.Max(workArea.Top, workArea.Bottom - 100));
     }
 
     private void SavePosition()

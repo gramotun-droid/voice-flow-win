@@ -42,7 +42,9 @@ public static class TextNormalizer
                     continue;
                 }
 
-                pendingSpace = builder.Length > 0;
+                // После перевода строки пробел не нужен: он сдвинул бы начало
+                // новой строки на один символ вправо.
+                pendingSpace = builder.Length > 0 && builder[^1] != '\n';
                 continue;
             }
 

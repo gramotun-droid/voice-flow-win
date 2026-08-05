@@ -31,14 +31,30 @@ public sealed class InputInterventionMonitor : IInputInterventionMonitor
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(120);
 
+    /// <summary>
+    /// Сколько после собственного ввода расхождение каретки считается его
+    /// последствием, а не вмешательством.
+    /// </summary>
+    /// <remarks>
+    /// Позиция каретки берётся из её экранных координат, то есть меняется от
+    /// каждого напечатанного символа. Поле обновляет координаты асинхронно, уже
+    /// после возврата из SendInput, поэтому сразу после вставки наблюдаемая
+    /// каретка почти всегда «не там». Без этой паузы непрерывная диктовка сама
+    /// себе выставляла признак ручной правки.
+    /// </remarks>
+    private static readonly TimeSpan CaretSettleWindow = TimeSpan.FromMilliseconds(700);
+
     private readonly LowLevelKeyboardHook _hook;
     private readonly IFocusTracker _focusTracker;
     private readonly ILogger<InputInterventionMonitor> _logger;
     private readonly object _sync = new();
+    private readonly TimeProvider _time;
 
     private global::System.Threading.Timer? _pollTimer;
     private WindowFocusSnapshot _baseline = WindowFocusSnapshot.Unknown;
     private int _expectedCaret = -1;
+    private int _candidateCaret = -1;
+    private long _lastSelfInputTicks;
     private int _suppressDepth;
     private InterventionKind _detected = InterventionKind.None;
     private bool _disposed;
@@ -46,11 +62,13 @@ public sealed class InputInterventionMonitor : IInputInterventionMonitor
     public InputInterventionMonitor(
         LowLevelKeyboardHook hook,
         IFocusTracker focusTracker,
-        ILogger<InputInterventionMonitor>? logger = null)
+        ILogger<InputInterventionMonitor>? logger = null,
+        TimeProvider? timeProvider = null)
     {
         _hook = hook;
         _focusTracker = focusTracker;
         _logger = logger ?? NullLogger<InputInterventionMonitor>.Instance;
+        _time = timeProvider ?? TimeProvider.System;
         _hook.KeyEvent += OnKeyEvent;
     }
 
@@ -108,12 +126,21 @@ public sealed class InputInterventionMonitor : IInputInterventionMonitor
 
         var current = _focusTracker.Capture();
 
+        // Пустой снимок означает, что состояние узнать не удалось: система
+        // отдаёт его и при обычной перерисовке окна. Это не вмешательство.
+        if (current.WindowHandle == 0)
+        {
+            return InterventionKind.None;
+        }
+
         if (current.WindowHandle != baseline.WindowHandle || current.ProcessId != baseline.ProcessId)
         {
             return Record(InterventionKind.WindowChanged);
         }
 
-        if (current.FocusedControlHandle != baseline.FocusedControlHandle)
+        if (current.FocusedControlHandle != 0 &&
+            baseline.FocusedControlHandle != 0 &&
+            current.FocusedControlHandle != baseline.FocusedControlHandle)
         {
             return Record(InterventionKind.FocusedControlChanged);
         }
@@ -123,16 +150,41 @@ public sealed class InputInterventionMonitor : IInputInterventionMonitor
             if (_suppressDepth > 0)
             {
                 // Пока приложение печатает само, каретка обязана двигаться.
+                _candidateCaret = -1;
                 return InterventionKind.None;
             }
 
-            if (_expectedCaret >= 0 && current.CaretPosition >= 0 && current.CaretPosition != _expectedCaret)
+            if (_expectedCaret < 0 || current.CaretPosition < 0)
             {
-                return Record(InterventionKind.CaretMoved);
+                return InterventionKind.None;
             }
-        }
 
-        return InterventionKind.None;
+            if (current.CaretPosition == _expectedCaret)
+            {
+                _candidateCaret = -1;
+                return InterventionKind.None;
+            }
+
+            // Каретка ещё догоняет собственный ввод — принимаем её новое
+            // положение за ожидаемое.
+            if (_time.GetElapsedTime(_lastSelfInputTicks) < CaretSettleWindow)
+            {
+                _expectedCaret = current.CaretPosition;
+                _candidateCaret = -1;
+                return InterventionKind.None;
+            }
+
+            // Единичное расхождение может быть промежуточным состоянием
+            // отрисовки, поэтому вмешательством считается только устойчивое:
+            // одна и та же новая позиция два опроса подряд.
+            if (_candidateCaret != current.CaretPosition)
+            {
+                _candidateCaret = current.CaretPosition;
+                return InterventionKind.None;
+            }
+
+            return Record(InterventionKind.CaretMoved);
+        }
     }
 
     public void Dispose()
@@ -154,6 +206,8 @@ public sealed class InputInterventionMonitor : IInputInterventionMonitor
         lock (_sync)
         {
             _expectedCaret = current.CaretPosition;
+            _candidateCaret = -1;
+            _lastSelfInputTicks = _time.GetTimestamp();
         }
     }
 
@@ -246,10 +300,16 @@ public sealed class InputInterventionMonitor : IInputInterventionMonitor
             }
 
             _disposed = true;
-            if (Interlocked.Decrement(ref _owner._suppressDepth) == 0 && _owner.IsWatching)
+
+            // Ожидаемая позиция обновляется до снятия блокировки: иначе опрос
+            // успевал увидеть уже сдвинутую нашей же вставкой каретку рядом со
+            // старым ожидаемым значением и объявлял это вмешательством.
+            if (_owner._suppressDepth == 1 && _owner.IsWatching)
             {
                 _owner.RefreshExpectedCaret();
             }
+
+            Interlocked.Decrement(ref _owner._suppressDepth);
         }
     }
 }

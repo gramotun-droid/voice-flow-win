@@ -56,6 +56,20 @@ public sealed class ModelManager
 
     private const int AttemptsPerSource = 3;
 
+    /// <summary>
+    /// Ниже какой средней скорости источник считается безнадёжным.
+    /// </summary>
+    /// <remarks>
+    /// Обрыв ловится таймаутом молчания, но замедление до килобайта в секунду
+    /// формально остаётся работающей загрузкой: данные идут, а модель на сотни
+    /// мегабайт качалась бы сутки. Порог заведомо ниже любого обычного канала,
+    /// чтобы не мешать медленному, но пригодному соединению.
+    /// </remarks>
+    private const long MinimumBytesPerSecond = 16 * 1024;
+
+    /// <summary>Сколько ждать, прежде чем судить о скорости источника.</summary>
+    private static readonly TimeSpan SpeedGracePeriod = TimeSpan.FromSeconds(90);
+
     private readonly HttpClient _httpClient;
     private readonly AppPaths _paths;
     private readonly ILogger<ModelManager> _logger;
@@ -435,6 +449,14 @@ public sealed class ModelManager
             lastReport = now;
             var elapsed = (now - startedAt).TotalSeconds;
             var speed = elapsed > 0 ? (received - startedFrom) / elapsed : 0;
+
+            // Источник отдаёт настолько медленно, что загрузка не закончится
+            // никогда: прерываем, чтобы попробовать следующий.
+            if (now - startedAt > SpeedGracePeriod && speed < MinimumBytesPerSecond)
+            {
+                throw new HttpRequestException(
+                    $"Источник {uri.Host} отдаёт около {Megabytes((long)speed)} МБ/с — загрузка прервана.");
+            }
 
             // Загрузка занимает 0.9 шкалы, остальное — проверка и распаковка.
             Report(

@@ -190,9 +190,17 @@ jobs:
           Проверить целостность файлов можно по checksums.txt.
           "@
 
-          $prerelease = if ($version -match '-') { '--prerelease' } else { '' }
-          gh release create "v$version" (Get-ChildItem artifacts -File | ForEach-Object { $_.FullName }) `
-            --title "VoiceFlowWin $version" --notes $notes $prerelease
+          # Аргументы собираются списком: пустая строка, переданная позиционно,
+          # воспринимается gh как имя файла и роняет публикацию.
+          $arguments = @("v$version")
+          $arguments += Get-ChildItem artifacts -File | ForEach-Object { $_.FullName }
+          $arguments += @('--title', "VoiceFlowWin $version", '--notes', $notes)
+
+          if ($version -match '-') {
+            $arguments += '--prerelease'
+          }
+
+          gh release create @arguments
 
       - name: Артефакты сборки
         if: always()

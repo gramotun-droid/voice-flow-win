@@ -1,0 +1,89 @@
+using VoiceFlowWin.Core.Settings;
+using Xunit;
+
+namespace VoiceFlowWin.Tests;
+
+/// <summary>
+/// Проверяет перенос настроек прежних версий: умолчание меняется, осознанный
+/// выбор пользователя — нет.
+/// </summary>
+public sealed class SettingsMigrationTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "vfw-migration-" + Guid.NewGuid().ToString("N"));
+    private readonly AppPaths _paths;
+
+    public SettingsMigrationTests()
+    {
+        _paths = new AppPaths(_root);
+        _paths.EnsureCreated();
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_root))
+        {
+            Directory.Delete(_root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Прежнее_умолчание_переносится_на_Ctrl_F5()
+    {
+        WriteLegacySettings(virtualKey: 0x20, modifiers: "Control, Alt");
+
+        var settings = new SettingsService(_paths).Load();
+
+        Assert.Equal(HotkeyDefinition.Default, settings.General.Hotkey);
+        Assert.Equal(SettingsService.CurrentSchemaVersion, settings.SchemaVersion);
+    }
+
+    [Fact]
+    public void Выбранное_пользователем_сочетание_не_меняется()
+    {
+        WriteLegacySettings(virtualKey: 0x72, modifiers: "Control, Shift");
+
+        var settings = new SettingsService(_paths).Load();
+
+        Assert.Equal(0x72, settings.General.Hotkey.VirtualKey);
+        Assert.Equal(HotkeyModifiers.Control | HotkeyModifiers.Shift, settings.General.Hotkey.Modifiers);
+    }
+
+    [Fact]
+    public void Перенос_записывается_на_диск_и_не_повторяется()
+    {
+        WriteLegacySettings(virtualKey: 0x20, modifiers: "Control, Alt");
+        new SettingsService(_paths).Load();
+
+        // После переноса пользователь сознательно выбирает прежнее сочетание —
+        // повторный запуск не имеет права его вернуть к умолчанию.
+        var service = new SettingsService(_paths);
+        var settings = service.Load();
+        settings.General.Hotkey = HotkeyDefinition.LegacyDefault;
+        service.Save(settings);
+
+        var reloaded = new SettingsService(_paths).Load();
+
+        Assert.Equal(HotkeyDefinition.LegacyDefault, reloaded.General.Hotkey);
+    }
+
+    [Fact]
+    public void Новая_установка_сразу_на_текущей_схеме()
+    {
+        var settings = new SettingsService(_paths).Load();
+
+        Assert.Equal(SettingsService.CurrentSchemaVersion, settings.SchemaVersion);
+        Assert.Equal(HotkeyDefinition.Default, settings.General.Hotkey);
+    }
+
+    private void WriteLegacySettings(int virtualKey, string modifiers) =>
+        File.WriteAllText(
+            _paths.SettingsFile,
+            $$"""
+            {
+              "general": {
+                "activationMode": "Toggle",
+                "hotkey": { "virtualKey": {{virtualKey}}, "modifiers": "{{modifiers}}" }
+              }
+            }
+            """);
+}

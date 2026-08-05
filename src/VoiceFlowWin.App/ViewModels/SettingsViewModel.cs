@@ -484,6 +484,9 @@ public sealed class SettingsViewModel : ObservableObject
 
     private static AppSettings Clone(AppSettings source) => new()
     {
+        // Версию схемы обязательно переносить: без неё сохранение из окна
+        // настроек выглядело бы как файл прежней версии и перенос повторился бы.
+        SchemaVersion = source.SchemaVersion,
         General = new GeneralSettings
         {
             ActivationMode = source.General.ActivationMode,

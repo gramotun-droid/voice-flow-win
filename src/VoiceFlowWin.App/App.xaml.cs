@@ -85,8 +85,9 @@ public partial class App : Application
                 MessageBoxImage.Warning);
         }
 
+        // Overlay создаётся сразу, но показывается только на время диктовки.
         _overlay = _services.GetRequiredService<OverlayWindow>();
-        _overlay.Show();
+        _overlay.SyncVisibility();
 
         _tray = _services.GetRequiredService<TrayIconHost>();
         _tray.ShowSettingsRequested += (_, _) => ShowSettings();

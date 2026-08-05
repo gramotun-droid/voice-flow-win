@@ -39,7 +39,47 @@ public partial class OverlayWindow : Window
         DataContext = viewModel;
 
         RestorePosition();
-        _controller.StateChanged += (_, _) => Dispatcher.BeginInvoke(UpdateIndicator);
+        _controller.StateChanged += (_, _) => Dispatcher.BeginInvoke(() =>
+        {
+            UpdateIndicator();
+            SyncVisibility();
+        });
+
+        // Замороженный результат Whisper появляется уже после остановки
+        // диктовки — окно должно дожить до того, как пользователь его применит
+        // или скопирует.
+        _viewModel.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(OverlayViewModel.HasBlockedResult))
+            {
+                Dispatcher.BeginInvoke(SyncVisibility);
+            }
+        };
+
+        _settings.SettingsChanged += (_, _) => Dispatcher.BeginInvoke(SyncVisibility);
+    }
+
+    /// <summary>
+    /// Показывает окно только тогда, когда оно что-то сообщает.
+    /// </summary>
+    /// <remarks>
+    /// Постоянно висящее поверх всех окон окно мешает работе, поэтому overlay
+    /// живёт ровно столько, сколько идёт диктовка: плюс незакрытая ошибка и
+    /// замороженный результат, который иначе некуда было бы применить.
+    /// </remarks>
+    public void SyncVisibility()
+    {
+        var wanted = _settings.Current.Overlay.Visible
+            && (_controller.State != DictationState.Idle || _viewModel.HasBlockedResult);
+
+        if (wanted && !IsVisible)
+        {
+            Show();
+        }
+        else if (!wanted && IsVisible)
+        {
+            Hide();
+        }
     }
 
     protected override void OnSourceInitialized(EventArgs e)

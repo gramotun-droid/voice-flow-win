@@ -59,13 +59,29 @@ public sealed class SettingsService : ISettingsService
 
     public event EventHandler<AppSettings>? SettingsChanged;
 
+    /// <summary>Текущая версия схемы настроек.</summary>
+    public const int CurrentSchemaVersion = 2;
+
     public AppSettings Load()
     {
+        AppSettings settings;
+        bool migrated;
+
         lock (_sync)
         {
-            _current = ReadFromDisk();
-            return _current;
+            settings = ReadFromDisk();
+            migrated = Migrate(settings);
+            _current = settings;
         }
+
+        // Перенос записывается сразу, иначе он повторялся бы при каждом запуске
+        // и затирал бы сочетание, выбранное пользователем уже после переноса.
+        if (migrated)
+        {
+            Save(settings);
+        }
+
+        return settings;
     }
 
     public void Save(AppSettings settings)
@@ -94,11 +110,35 @@ public sealed class SettingsService : ISettingsService
         SettingsChanged?.Invoke(this, settings);
     }
 
+    /// <summary>Приводит настройки прежних версий к текущей схеме.</summary>
+    /// <returns><c>true</c>, если что-то изменилось и настройки нужно сохранить.</returns>
+    private bool Migrate(AppSettings settings)
+    {
+        if (settings.SchemaVersion >= CurrentSchemaVersion)
+        {
+            return false;
+        }
+
+        // Версии до второй писали сочетание Ctrl + Alt + Space. Тому, кто его
+        // не менял, отдаём новое умолчание Ctrl + F5.
+        if (settings.General.Hotkey == HotkeyDefinition.LegacyDefault)
+        {
+            settings.General.Hotkey = HotkeyDefinition.Default;
+            _logger.LogInformation(
+                "Сочетание вызова перенесено на {Hotkey}.",
+                HotkeyDefinition.Default.ToDisplayString());
+        }
+
+        settings.SchemaVersion = CurrentSchemaVersion;
+        return true;
+    }
+
     private AppSettings ReadFromDisk()
     {
         if (!File.Exists(_paths.SettingsFile))
         {
-            return new AppSettings();
+            // Новая установка сразу получает актуальную схему: переносить нечего.
+            return new AppSettings { SchemaVersion = CurrentSchemaVersion };
         }
 
         try
@@ -110,7 +150,7 @@ public sealed class SettingsService : ISettingsService
         {
             _logger.LogWarning(ex, "Файл настроек повреждён или недоступен, используются значения по умолчанию.");
             TryQuarantine();
-            return new AppSettings();
+            return new AppSettings { SchemaVersion = CurrentSchemaVersion };
         }
     }
 

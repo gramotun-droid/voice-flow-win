@@ -10,6 +10,9 @@ using VoiceFlowWin.Updater;
 
 namespace VoiceFlowWin.App.ViewModels;
 
+/// <summary>Вариант выбора модели на вкладке «Распознавание».</summary>
+public sealed record ModelChoice(string Name, string Path);
+
 /// <summary>Одна модель в списке менеджера моделей.</summary>
 public sealed class ModelItemViewModel : ObservableObject
 {
@@ -121,6 +124,11 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         Models = new ObservableCollection<ModelItemViewModel>(
             ModelCatalog.All.Select(model => new ModelItemViewModel(model, models.IsInstalled(model))));
 
+        RussianModelChoices = [];
+        EnglishModelChoices = [];
+        WhisperModelChoices = [];
+        RefreshModelChoices();
+
         SaveCommand = new RelayCommand(Save);
         ResetHotkeyCommand = new RelayCommand(() => Hotkey = HotkeyDefinition.Default);
         ClearHotkeyCommand = new RelayCommand(() => Hotkey = new HotkeyDefinition(0, HotkeyModifiers.None));
@@ -147,6 +155,13 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public ObservableCollection<UserDictionaryEntry> DictionaryEntries { get; }
 
     public ObservableCollection<ModelItemViewModel> Models { get; }
+
+    /// <summary>Скачанные русские модели Vosk для выбора на вкладке «Распознавание».</summary>
+    public ObservableCollection<ModelChoice> RussianModelChoices { get; }
+
+    public ObservableCollection<ModelChoice> EnglishModelChoices { get; }
+
+    public ObservableCollection<ModelChoice> WhisperModelChoices { get; }
 
     public RelayCommand SaveCommand { get; }
 
@@ -389,6 +404,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
 
         _settingsService.Save(persisted);
         OnPropertyChanged(nameof(Draft));
+        RefreshModelChoices();
     }
 
     private void RemoveModel()
@@ -423,6 +439,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
 
             _models.SynchronizeInstalledPaths(Draft);
             OnPropertyChanged(nameof(Draft));
+            RefreshModelChoices();
             StatusMessage = "Модель удалена.";
         }
     }
@@ -457,6 +474,58 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         else
         {
             StatusMessage = "Не удалось запустить установку. Текущая версия продолжает работать.";
+        }
+    }
+
+    /// <summary>
+    /// Пересобирает списки моделей для вкладки «Распознавание».
+    /// </summary>
+    /// <remarks>
+    /// Выбирать модель путём в текстовом поле неудобно и легко ошибиться,
+    /// поэтому список строится из того, что реально скачано. Путь, заданный
+    /// вручную и не совпадающий ни с одной моделью каталога, остаётся в списке
+    /// первым пунктом: настройка не должна молча сбрасываться.
+    /// </remarks>
+    private void RefreshModelChoices()
+    {
+        // Очистка списка сбрасывает выбор в ComboBox, и привязка успевает
+        // записать в настройки пустой путь — поэтому пути снимаются заранее и
+        // возвращаются на место после перестроения.
+        var russian = Draft.Vosk.RussianModelPath;
+        var english = Draft.Vosk.EnglishModelPath;
+        var whisper = Draft.Whisper.ModelPath;
+
+        Fill(RussianModelChoices, ModelKind.Vosk, RecognitionLanguage.Russian, russian);
+        Fill(EnglishModelChoices, ModelKind.Vosk, RecognitionLanguage.English, english);
+        Fill(WhisperModelChoices, ModelKind.Whisper, null, whisper);
+
+        Draft.Vosk.RussianModelPath = russian;
+        Draft.Vosk.EnglishModelPath = english;
+        Draft.Whisper.ModelPath = whisper;
+        OnPropertyChanged(nameof(Draft));
+    }
+
+    private void Fill(
+        ObservableCollection<ModelChoice> target,
+        ModelKind kind,
+        RecognitionLanguage? language,
+        string currentPath)
+    {
+        target.Clear();
+
+        var installed = ModelCatalog.All
+            .Where(model => model.Kind == kind && (language is null || model.Language == language))
+            .Where(_models.IsInstalled);
+
+        foreach (var model in installed)
+        {
+            target.Add(new ModelChoice($"{model.DisplayName} ({model.SizeText})", _models.GetInstallPath(model)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(currentPath) &&
+            !target.Any(choice => string.Equals(choice.Path, currentPath, StringComparison.OrdinalIgnoreCase)))
+        {
+            target.Insert(0, new ModelChoice("Указанный вручную путь", currentPath));
         }
     }
 
@@ -500,6 +569,8 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
             {
                 item.IsInstalled = _models.IsInstalled(item.Descriptor);
             }
+
+            RefreshModelChoices();
         });
 
     private void OnModelProgress(object? sender, ModelProgressEventArgs e)

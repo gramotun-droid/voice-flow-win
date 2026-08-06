@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -96,10 +97,12 @@ public sealed class WasapiAudioCaptureService : IAudioCaptureService
 
             try
             {
-                var enumerator = new MMDeviceEnumerator();
-                _device = string.IsNullOrWhiteSpace(deviceId)
-                    ? enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Communications)
-                    : enumerator.GetDevice(deviceId);
+                _device = ResolveDevice(deviceId);
+                _logger.LogInformation(
+                    "Микрофон выбран: {Device} ({Id}), состояние {State}",
+                    _device.FriendlyName,
+                    _device.ID,
+                    _device.State);
 
                 _capture = new WasapiCapture(_device)
                 {
@@ -117,10 +120,91 @@ public sealed class WasapiAudioCaptureService : IAudioCaptureService
             {
                 _logger.LogError(ex, "Не удалось начать захват микрофона.");
                 CleanupUnsafe();
-                CaptureFailed?.Invoke(this, "Не удалось начать запись с микрофона: " + ex.Message);
+                CaptureFailed?.Invoke(this, DescribeFailure(ex));
             }
         }
     }
+
+
+    /// <summary>
+    /// Выбирает микрофон, с которого действительно можно писать.
+    /// </summary>
+    /// <remarks>
+    /// Устройство по умолчанию для роли Communications в Windows может быть не
+    /// задано или указывать на отключённый endpoint — активация такого
+    /// заканчивается ошибкой AUDCLNT_E_DEVICE_INVALIDATED. Поэтому выбор идёт
+    /// по цепочке: заданное в настройках, затем умолчания для двух ролей, затем
+    /// первый активный микрофон. Неактивные устройства отбрасываются сразу.
+    /// </remarks>
+    private MMDevice ResolveDevice(string? deviceId)
+    {
+        var enumerator = new MMDeviceEnumerator();
+
+        if (!string.IsNullOrWhiteSpace(deviceId))
+        {
+            var configured = TryGetDevice(() => enumerator.GetDevice(deviceId));
+            if (configured is not null)
+            {
+                return configured;
+            }
+
+            _logger.LogWarning("Микрофон из настроек недоступен, берётся устройство по умолчанию.");
+        }
+
+        var communications = TryGetDevice(() => enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Communications));
+        if (communications is not null)
+        {
+            return communications;
+        }
+
+        var console = TryGetDevice(() => enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Console));
+        if (console is not null)
+        {
+            return console;
+        }
+
+        var active = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active).FirstOrDefault();
+        if (active is not null)
+        {
+            return active;
+        }
+
+        throw new InvalidOperationException("В системе нет доступного микрофона.");
+    }
+
+    private MMDevice? TryGetDevice(Func<MMDevice> factory)
+    {
+        try
+        {
+            var device = factory();
+            if (device.State == DeviceState.Active)
+            {
+                return device;
+            }
+
+            _logger.LogWarning("Микрофон {Device} в состоянии {State} — пропущен.", device.FriendlyName, device.State);
+            device.Dispose();
+        }
+        catch (Exception ex) when (ex is COMException or ArgumentException or InvalidOperationException)
+        {
+            _logger.LogDebug(ex, "Устройство записи недоступно.");
+        }
+
+        return null;
+    }
+
+    /// <summary>Переводит код WASAPI в то, что пользователь может исправить.</summary>
+    private static string DescribeFailure(Exception exception) => exception switch
+    {
+        COMException { ErrorCode: unchecked((int)0x88890004) } =>
+            "Микрофон недоступен: устройство отключено, выключено в системе или занято. " +
+            "Проверьте микрофон в параметрах звука Windows и выберите его в настройках приложения.",
+        COMException { ErrorCode: unchecked((int)0x8889000A) } =>
+            "Микрофон занят другим приложением. Закройте программу, которая его использует, и повторите.",
+        COMException { ErrorCode: unchecked((int)0x80070005) } =>
+            "Windows запретила доступ к микрофону. Разрешите его в «Параметры → Конфиденциальность → Микрофон».",
+        _ => "Не удалось начать запись с микрофона: " + exception.Message,
+    };
 
     public void Stop()
     {

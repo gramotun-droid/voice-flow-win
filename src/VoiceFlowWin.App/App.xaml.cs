@@ -56,6 +56,27 @@ public partial class App : Application
 
         DispatcherUnhandledException += OnDispatcherUnhandledException;
 
+        // Падение в фоновом потоке или в native-библиотеке иначе не оставляет
+        // следов: процесс исчезает молча, и разбираться не по чему.
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            var logger = _services?.GetService<ILogger<App>>();
+            if (args.ExceptionObject is Exception exception)
+            {
+                logger?.LogCritical(exception, "Необработанная ошибка, приложение завершается.");
+            }
+            else
+            {
+                logger?.LogCritical("Необработанная ошибка неизвестного типа, приложение завершается.");
+            }
+        };
+
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            _services?.GetService<ILogger<App>>()?.LogError(args.Exception, "Ошибка фоновой задачи.");
+            args.SetObserved();
+        };
+
         _services = BuildServices();
 
         var paths = _services.GetRequiredService<AppPaths>();

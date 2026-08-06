@@ -260,6 +260,7 @@ public sealed class HybridTranscriptionCoordinator
         var blockReason = GetReplacementBlockReason(context, finalText);
         if (blockReason is not null)
         {
+            _logger.LogInformation("Замена фразы {SegmentId} не выполнена: {Reason}", segment.SegmentId, blockReason);
             segment.MarkFrozenWithResult(finalText);
             ReplacementBlocked?.Invoke(this, new ReplacementBlockedEventArgs(segment, finalText, blockReason));
             SegmentUpdated?.Invoke(this, new SegmentEventArgs(segment));
@@ -423,9 +424,14 @@ public sealed class HybridTranscriptionCoordinator
 
         if (last is null || last.Segment.UserIntervened || !IsTargetUnchanged(last.Segment))
         {
-            _logger.LogInformation("Финальный проход не применён: текст правился или сменилось окно.");
+            _logger.LogInformation(
+                "Финальный проход не применён: вмешательство {Intervened}, окно то же {SameTarget}.",
+                last?.Segment.UserIntervened,
+                last is not null && IsTargetUnchanged(last.Segment));
             return false;
         }
+
+
 
         // Разделитель первой фразы принадлежит приложению и заменяется вместе
         // с текстом, поэтому он восстанавливается перед новым текстом.
@@ -434,6 +440,7 @@ public sealed class HybridTranscriptionCoordinator
             : string.Empty;
 
         var desired = separator + normalized;
+        _logger.LogInformation("Финальный проход заменяет «{Injected}» на «{Corrected}».", injected, desired);
 
         await _injectionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -617,6 +624,13 @@ public sealed class HybridTranscriptionCoordinator
             }
 
             var plan = TextDiffProcessor.ComputeTailReplacement(segment.InjectedText, desired, segment.InjectedLength);
+            _logger.LogInformation(
+                "Фраза {SegmentId}: в поле «{Injected}» → «{Desired}», удалить {Backspaces}, напечатать «{ToType}».",
+                segment.SegmentId,
+                segment.InjectedText,
+                desired,
+                plan.BackspaceCount,
+                plan.TextToType);
             if (plan.IsNoOp)
             {
                 // Правка потребовала бы удалить чужой текст — отказываемся.

@@ -23,14 +23,29 @@ public class ModelCatalogTests
     }
 
     [Fact]
-    public void У_рекомендованных_моделей_есть_запасной_источник_и_контрольная_сумма()
+    public void У_рекомендованных_моделей_есть_контрольная_сумма()
     {
-        // Рекомендованные модели скачиваются автоматически: молчаливый обрыв
-        // единственного источника оставил бы приложение неработоспособным.
+        // Рекомендованные модели скачиваются автоматически, без участия
+        // пользователя, поэтому подменённый или битый файл должен отсекаться
+        // до того, как движок попробует его загрузить.
         foreach (var model in ModelCatalog.Recommended)
         {
-            Assert.True(model.DownloadUrls.Count() > 1, $"{model.Id}: нет запасного источника");
             Assert.False(string.IsNullOrWhiteSpace(model.Sha256), $"{model.Id}: нет контрольной суммы");
+        }
+    }
+
+    [Fact]
+    public void У_моделей_с_huggingface_есть_зеркало()
+    {
+        // huggingface.co у части провайдеров отдаёт около килобайта в секунду:
+        // единственный такой источник означал бы, что модель не скачается.
+        foreach (var model in ModelCatalog.All)
+        {
+            var urls = model.DownloadUrls.ToList();
+            if (urls.Any(url => url.Contains("huggingface.co", StringComparison.OrdinalIgnoreCase)))
+            {
+                Assert.True(urls.Count > 1, $"{model.Id}: нет запасного источника");
+            }
         }
     }
 
@@ -57,8 +72,8 @@ public class ModelCatalogTests
     [Fact]
     public void Есть_по_модели_на_каждую_роль()
     {
-        Assert.Contains(ModelCatalog.Recommended, model => model.Kind == ModelKind.Vosk && model.Language == RecognitionLanguage.Russian);
-        Assert.Contains(ModelCatalog.Recommended, model => model.Kind == ModelKind.Vosk && model.Language == RecognitionLanguage.English);
+        Assert.Contains(ModelCatalog.Recommended, model => model.Kind == ModelKind.Streaming && model.Language == RecognitionLanguage.Russian);
+        Assert.Contains(ModelCatalog.Recommended, model => model.Kind == ModelKind.Streaming && model.Language == RecognitionLanguage.English);
         Assert.Contains(ModelCatalog.Recommended, model => model.Kind == ModelKind.Whisper);
     }
 }

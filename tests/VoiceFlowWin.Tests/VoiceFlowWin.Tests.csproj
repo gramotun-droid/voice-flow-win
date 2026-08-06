@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\VoiceFlowWin.Core\VoiceFlowWin.Core.csproj" />
+    <ProjectReference Include="..\..\src\VoiceFlowWin.SherpaOnnx\VoiceFlowWin.SherpaOnnx.csproj" />
     <ProjectReference Include="..\..\src\VoiceFlowWin.Audio\VoiceFlowWin.Audio.csproj" />
     <ProjectReference Include="..\..\src\VoiceFlowWin.Updater\VoiceFlowWin.Updater.csproj" />
   </ItemGroup>

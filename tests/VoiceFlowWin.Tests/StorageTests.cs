@@ -32,7 +32,7 @@ public sealed class StorageTests : IDisposable
         var settings = service.Load();
         settings.General.ActivationMode = DictationActivationMode.PushToTalk;
         settings.General.Hotkey = new HotkeyDefinition(0x72, HotkeyModifiers.Control | HotkeyModifiers.Shift);
-        settings.Vosk.StableRepeats = 4;
+        settings.Streaming.StableRepeats = 4;
 
         service.Save(settings);
         var restored = new SettingsService(_paths).Load();
@@ -40,7 +40,7 @@ public sealed class StorageTests : IDisposable
         Assert.Equal(DictationActivationMode.PushToTalk, restored.General.ActivationMode);
         Assert.Equal(0x72, restored.General.Hotkey.VirtualKey);
         Assert.Equal(HotkeyModifiers.Control | HotkeyModifiers.Shift, restored.General.Hotkey.Modifiers);
-        Assert.Equal(4, restored.Vosk.StableRepeats);
+        Assert.Equal(4, restored.Streaming.StableRepeats);
     }
 
     [Fact]

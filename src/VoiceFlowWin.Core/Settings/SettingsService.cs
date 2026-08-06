@@ -60,7 +60,7 @@ public sealed class SettingsService : ISettingsService
     public event EventHandler<AppSettings>? SettingsChanged;
 
     /// <summary>Текущая версия схемы настроек.</summary>
-    public const int CurrentSchemaVersion = 3;
+    public const int CurrentSchemaVersion = 4;
 
     public AppSettings Load()
     {
@@ -137,6 +137,17 @@ public sealed class SettingsService : ISettingsService
         {
             settings.General.LiveTextMode = LiveTextMode.InsertAfterPause;
             _logger.LogInformation("Режим ввода перенесён на вставку фразы после паузы.");
+        }
+
+        // Четвёртая версия сменила движок потокового распознавания на
+        // sherpa-onnx. Модели Vosk ему не подходят, а пути к ним указывают на
+        // каталоги, которых он не поймёт, — очищаем, чтобы новые модели
+        // скачались сами.
+        if (settings.SchemaVersion < 4)
+        {
+            settings.Streaming.RussianModelPath = string.Empty;
+            settings.Streaming.EnglishModelPath = string.Empty;
+            _logger.LogInformation("Пути потоковых моделей очищены: движок распознавания сменился.");
         }
 
         settings.SchemaVersion = CurrentSchemaVersion;

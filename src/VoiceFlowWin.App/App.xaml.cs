@@ -16,7 +16,7 @@ using VoiceFlowWin.Core.Dictionary;
 using VoiceFlowWin.Core.Models;
 using VoiceFlowWin.Core.Settings;
 using VoiceFlowWin.Updater;
-using VoiceFlowWin.VoskEngine;
+using VoiceFlowWin.SherpaEngine;
 using VoiceFlowWin.WhisperEngine;
 using VoiceFlowWin.Windows.Audio;
 using VoiceFlowWin.Windows.Input;
@@ -168,7 +168,7 @@ public partial class App : Application
 
     /// <summary>Без моделей приложение работать не может — предлагаем скачать их сразу.</summary>
     private static bool RequiresFirstRunSetup(AppSettings settings) =>
-        string.IsNullOrWhiteSpace(settings.Vosk.RussianModelPath) || string.IsNullOrWhiteSpace(settings.Whisper.ModelPath);
+        string.IsNullOrWhiteSpace(settings.Streaming.RussianModelPath) || string.IsNullOrWhiteSpace(settings.Whisper.ModelPath);
 
     private static ServiceProvider BuildServices()
     {
@@ -215,8 +215,8 @@ public partial class App : Application
             provider.GetRequiredService<IVoiceActivityDetector>(),
             provider.GetRequiredService<ISettingsService>().Current.Segmentation));
 
-        services.AddSingleton<VoskModelLoader>();
-        services.AddSingleton<IStreamingRecognizer, StreamingVoskRecognizer>();
+        services.AddSingleton<ZipformerModelLoader>();
+        services.AddSingleton<IStreamingRecognizer, StreamingZipformerRecognizer>();
         services.AddSingleton<IFinalRecognizer, WhisperFinalRecognizer>();
         services.AddSingleton<WhisperTranscriptionQueue>();
         services.AddSingleton<IFinalRecognitionQueue>(provider => provider.GetRequiredService<WhisperTranscriptionQueue>());

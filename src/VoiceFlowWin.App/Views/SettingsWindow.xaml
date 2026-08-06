@@ -169,34 +169,34 @@
             <TabItem Header="Распознавание">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="12">
-                        <TextBlock Text="Vosk — потоковое распознавание" Style="{StaticResource SectionHeader}" />
+                        <TextBlock Text="Потоковое распознавание — Zipformer" Style="{StaticResource SectionHeader}" />
 
                         <TextBlock Text="Русская модель" Style="{StaticResource MutedText}" />
                         <ComboBox ItemsSource="{Binding RussianModelChoices}" DisplayMemberPath="Name"
-                                  SelectedValuePath="Path" SelectedValue="{Binding Draft.Vosk.RussianModelPath}" />
-                        <TextBlock Text="{Binding Draft.Vosk.RussianModelPath}" Style="{StaticResource MutedText}"
+                                  SelectedValuePath="Path" SelectedValue="{Binding Draft.Streaming.RussianModelPath}" />
+                        <TextBlock Text="{Binding Draft.Streaming.RussianModelPath}" Style="{StaticResource MutedText}"
                                    FontSize="11" Margin="0,2,0,0" />
 
                         <TextBlock Text="Английская модель" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
                         <ComboBox ItemsSource="{Binding EnglishModelChoices}" DisplayMemberPath="Name"
-                                  SelectedValuePath="Path" SelectedValue="{Binding Draft.Vosk.EnglishModelPath}" />
-                        <TextBlock Text="{Binding Draft.Vosk.EnglishModelPath}" Style="{StaticResource MutedText}"
+                                  SelectedValuePath="Path" SelectedValue="{Binding Draft.Streaming.EnglishModelPath}" />
+                        <TextBlock Text="{Binding Draft.Streaming.EnglishModelPath}" Style="{StaticResource MutedText}"
                                    FontSize="11" Margin="0,2,0,0" />
 
                         <TextBlock Style="{StaticResource MutedText}" Margin="0,6,0,0"
                                    Text="В списке — скачанные модели со вкладки «Модели». Пока модель не скачана, выбирать нечего." />
 
                         <TextBlock Text="Частота промежуточных результатов, мс" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
-                        <TextBox Text="{Binding Draft.Vosk.PartialResultIntervalMs}" Width="120" HorizontalAlignment="Left" />
+                        <TextBox Text="{Binding Draft.Streaming.PartialResultIntervalMs}" Width="120" HorizontalAlignment="Left" />
 
                         <TextBlock Text="Подтверждений для стабильного слова" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
-                        <TextBox Text="{Binding Draft.Vosk.StableRepeats}" Width="120" HorizontalAlignment="Left" />
+                        <TextBox Text="{Binding Draft.Streaming.StableRepeats}" Width="120" HorizontalAlignment="Left" />
 
                         <TextBlock Text="Задержка стабилизации, мс" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
-                        <TextBox Text="{Binding Draft.Vosk.StabilityDelayMs}" Width="120" HorizontalAlignment="Left" />
+                        <TextBox Text="{Binding Draft.Streaming.StabilityDelayMs}" Width="120" HorizontalAlignment="Left" />
 
                         <TextBlock Text="Размер изменяемого хвоста, слов" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
-                        <TextBox Text="{Binding Draft.Vosk.VolatileTailWords}" Width="120" HorizontalAlignment="Left" />
+                        <TextBox Text="{Binding Draft.Streaming.VolatileTailWords}" Width="120" HorizontalAlignment="Left" />
 
                         <TextBlock Text="Whisper — финальная обработка" Style="{StaticResource SectionHeader}" />
                         <TextBlock Text="Модель" Style="{StaticResource MutedText}" />

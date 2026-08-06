@@ -47,7 +47,7 @@ public sealed class InjectionProblemEventArgs : EventArgs
 }
 
 /// <summary>
-/// Сводит вместе потоковый Vosk и финальный Whisper и отвечает за то, какой
+/// Сводит вместе потоковый Zipformer и финальный Whisper и отвечает за то, какой
 /// текст в итоге оказывается в чужом поле ввода.
 /// </summary>
 /// <remarks>
@@ -122,12 +122,12 @@ public sealed class HybridTranscriptionCoordinator
         var snapshot = focus ?? _focusTracker.Capture();
         var segment = new DictationSegment(++_lastSegmentId, language, snapshot, DateTimeOffset.UtcNow);
 
-        var voskSettings = _settings.Current.Vosk;
+        var streamingSettings = _settings.Current.Streaming;
         var prefix = new StablePrefixProcessor(new StablePrefixOptions
         {
-            RequiredRepeats = voskSettings.StableRepeats,
-            StabilityDelay = TimeSpan.FromMilliseconds(voskSettings.StabilityDelayMs),
-            VolatileTailWords = voskSettings.VolatileTailWords,
+            RequiredRepeats = streamingSettings.StableRepeats,
+            StabilityDelay = TimeSpan.FromMilliseconds(streamingSettings.StabilityDelayMs),
+            VolatileTailWords = streamingSettings.VolatileTailWords,
         });
 
         _segments[segment.SegmentId] = new SegmentContext
@@ -144,7 +144,7 @@ public sealed class HybridTranscriptionCoordinator
         return segment;
     }
 
-    /// <summary>Обрабатывает очередную промежуточную гипотезу Vosk.</summary>
+    /// <summary>Обрабатывает очередную промежуточную гипотезу потоковой модели.</summary>
     public async Task OnPartialResultAsync(long segmentId, string hypothesis, DateTimeOffset now, CancellationToken cancellationToken)
     {
         if (!_segments.TryGetValue(segmentId, out var context) || context.Segment.State.IsTerminal())
@@ -172,7 +172,7 @@ public sealed class HybridTranscriptionCoordinator
     }
 
     /// <summary>
-    /// Закрывает сегмент: финальный текст Vosk дописывается целиком, включая
+    /// Закрывает сегмент: финальный текст потоковой модели дописывается целиком, включая
     /// изменяемый хвост, который в безопасном режиме был только в overlay.
     /// </summary>
     public async Task EndSegmentAsync(long segmentId, string? voskFinalText, byte[] audio, CancellationToken cancellationToken)
@@ -186,9 +186,9 @@ public sealed class HybridTranscriptionCoordinator
         context.Segment.RecordHypothesis(update.StableText, update.StableText, string.Empty);
         context.Segment.SetAudio(audio);
 
-        // В режиме вставки после паузы текст Vosk в поле не попадает: его
+        // В режиме вставки после паузы текст потоковой модели в поле не попадает: его
         // задача — показать речь в overlay, а в поле уйдёт результат Whisper.
-        // Если Whisper не справится, текст Vosk вставит обработчик отказа.
+        // Если Whisper не справится, текст потоковой модели вставит обработчик отказа.
         if (_settings.Current.General.LiveTextMode != LiveTextMode.InsertAfterPause)
         {
             await SyncInjectionAsync(context, PrepareInterimText(context, update.StableText), cancellationToken).ConfigureAwait(false);
@@ -214,7 +214,7 @@ public sealed class HybridTranscriptionCoordinator
         {
             // В режиме вставки после паузы в поле ещё ничего нет, и отказ
             // Whisper означал бы потерю фразы целиком. Вставляем то, что
-            // услышал Vosk: хуже по качеству, но лучше, чем ничего.
+            // услышала потоковая модель: хуже по качеству, но лучше, чем ничего.
             if (IsDeferredInsert && segment.InjectedLength == 0 && segment.StableText.Length > 0)
             {
                 var fallback = PrepareInterimText(context, segment.StableText);
@@ -432,7 +432,7 @@ public sealed class HybridTranscriptionCoordinator
         if (injectedCore.Length > 0 &&
             TextDiffProcessor.Similarity(injectedCore, finalText) < injectionSettings.MinimumReplacementSimilarity)
         {
-            // Whisper вернул текст, почти не похожий на услышанное Vosk.
+            // Whisper вернул текст, почти не похожий на услышанное потоковой моделью.
             // Скорее всего это ошибка распознавания, а не исправление.
             return "Результат Whisper слишком сильно отличается от введённого текста.";
         }

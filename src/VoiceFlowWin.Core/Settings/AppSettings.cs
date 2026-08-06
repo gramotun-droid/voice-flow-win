@@ -69,7 +69,7 @@ public sealed class AppSettings
 
     public GeneralSettings General { get; set; } = new();
     public MicrophoneSettings Microphone { get; set; } = new();
-    public VoskSettings Vosk { get; set; } = new();
+    public StreamingSettings Streaming { get; set; } = new();
     public WhisperSettings Whisper { get; set; } = new();
     public InjectionSettings Injection { get; set; } = new();
     public SegmentationSettings Segmentation { get; set; } = new();
@@ -115,7 +115,8 @@ public sealed class MicrophoneSettings
     public bool NoiseSuppression { get; set; }
 }
 
-public sealed class VoskSettings
+/// <summary>Настройки потокового распознавания (sherpa-onnx, Zipformer).</summary>
+public sealed class StreamingSettings
 {
     public string RussianModelPath { get; set; } = string.Empty;
 
@@ -129,6 +130,9 @@ public sealed class VoskSettings
     public int StabilityDelayMs { get; set; } = 600;
 
     public int VolatileTailWords { get; set; } = 2;
+
+    /// <summary>Сколько потоков процессора отдать потоковой модели.</summary>
+    public int CpuThreads { get; set; } = 2;
 
     public StablePrefixOptionsSnapshot ToStablePrefixOptions() => new(StableRepeats, StabilityDelayMs, VolatileTailWords);
 }

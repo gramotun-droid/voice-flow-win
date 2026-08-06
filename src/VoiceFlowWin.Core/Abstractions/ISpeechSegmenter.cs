@@ -66,4 +66,14 @@ public interface IFinalRecognitionQueue
     event EventHandler<FinalRecognitionResult>? ResultReady;
 
     bool Enqueue(FinalRecognitionRequest request);
+
+    /// <summary>
+    /// Распознаёт запись немедленно, дождавшись результата.
+    /// </summary>
+    /// <remarks>
+    /// Нужно для прохода по всей диктовке: он выполняется один раз после
+    /// остановки, его результат ждут, и в общую очередь фраз он не встаёт —
+    /// иначе занял бы её на время всей обработки.
+    /// </remarks>
+    Task<FinalRecognitionResult> TranscribeNowAsync(FinalRecognitionRequest request, CancellationToken cancellationToken);
 }

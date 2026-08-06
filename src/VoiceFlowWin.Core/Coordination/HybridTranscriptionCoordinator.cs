@@ -75,6 +75,11 @@ public sealed class HybridTranscriptionCoordinator
     /// <summary>Текст, введённый приложением за текущий сеанс диктовки — контекст для регистра и пробелов.</summary>
     private string _sessionText = string.Empty;
 
+    /// <summary>Звук всего сеанса — исходник для финального прохода после остановки.</summary>
+    private readonly List<byte[]> _sessionAudio = new();
+
+    private long _sessionAudioBytes;
+
     public HybridTranscriptionCoordinator(
         ITextInjectionService injection,
         IFocusTracker focusTracker,
@@ -185,6 +190,7 @@ public sealed class HybridTranscriptionCoordinator
         var update = context.Prefix.Finalize(voskFinalText, DateTimeOffset.UtcNow);
         context.Segment.RecordHypothesis(update.StableText, update.StableText, string.Empty);
         context.Segment.SetAudio(audio);
+        RememberSessionAudio(audio);
 
         // В режиме вставки после паузы текст потоковой модели в поле не попадает: его
         // задача — показать речь в overlay, а в поле уйдёт результат Whisper.
@@ -344,6 +350,8 @@ public sealed class HybridTranscriptionCoordinator
         _interventionMonitor.StopWatching();
         CurrentSegment = null;
         _sessionText = string.Empty;
+        _sessionAudio.Clear();
+        _sessionAudioBytes = 0;
 
         foreach (var context in _segments.Values)
         {
@@ -353,6 +361,137 @@ public sealed class HybridTranscriptionCoordinator
         // Сегменты храним до конца сеанса: запоздавший результат Whisper
         // должен найти свой сегмент, а не примениться к чужому.
         _segments.Clear();
+    }
+
+    /// <summary>Звук всей диктовки одним куском — вход финального прохода.</summary>
+    /// <remarks>
+    /// Пустой массив означает, что проходить нечего: либо не было речи, либо
+    /// сеанс оказался длиннее допустимого и звук не копился.
+    /// </remarks>
+    public byte[] BuildSessionAudio()
+    {
+        if (_sessionAudio.Count == 0)
+        {
+            return [];
+        }
+
+        var combined = new byte[_sessionAudioBytes];
+        var offset = 0;
+        foreach (var chunk in _sessionAudio)
+        {
+            chunk.CopyTo(combined, offset);
+            offset += chunk.Length;
+        }
+
+        return combined;
+    }
+
+    /// <summary>Весь текст, введённый приложением за сеанс, в порядке фраз.</summary>
+    public string SessionInjectedText => string.Concat(
+        _segments.Values
+            .OrderBy(context => context.Segment.SegmentId)
+            .Select(context => context.Segment.InjectedText));
+
+    /// <summary>
+    /// Заменяет весь введённый за сеанс текст результатом финального прохода.
+    /// </summary>
+    /// <remarks>
+    /// Проход по всей диктовке видит фразы вместе, поэтому согласует формы слов
+    /// и пунктуацию между ними — того, что пофразная обработка сделать не может.
+    /// Замена выполняется тем же способом, что и пофразная: удаляется ровно
+    /// столько собственных элементов, сколько было введено, и печатается новый
+    /// текст. Если пользователь успел вмешаться или сменить окно, замена не
+    /// выполняется — правка чужого текста недопустима.
+    /// </remarks>
+    public async Task<bool> ApplySessionCorrectionAsync(string correctedText, CancellationToken cancellationToken)
+    {
+        var injected = SessionInjectedText;
+        if (injected.Length == 0 || string.IsNullOrWhiteSpace(correctedText))
+        {
+            return false;
+        }
+
+        var normalized = TextNormalizer.NormalizeWhitespace(correctedText);
+        if (string.Equals(normalized, injected.TrimStart(), StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var last = _segments.Values
+            .OrderBy(context => context.Segment.SegmentId)
+            .LastOrDefault();
+
+        if (last is null || last.Segment.UserIntervened || !IsTargetUnchanged(last.Segment))
+        {
+            _logger.LogInformation("Финальный проход не применён: текст правился или сменилось окно.");
+            return false;
+        }
+
+        // Разделитель первой фразы принадлежит приложению и заменяется вместе
+        // с текстом, поэтому он восстанавливается перед новым текстом.
+        var separator = injected.Length > 0 && char.IsWhiteSpace(injected[0])
+            ? injected[..1]
+            : string.Empty;
+
+        var desired = separator + normalized;
+
+        await _injectionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var elements = TextElements.Count(injected);
+
+            using (_interventionMonitor.SuppressSelfInput())
+            {
+                if (!await _injection.DeleteBackwardAsync(elements, cancellationToken).ConfigureAwait(false))
+                {
+                    _logger.LogWarning("Финальный проход не применён: не удалось удалить собственный текст.");
+                    return false;
+                }
+
+                var result = await _injection.InjectAsync(desired, cancellationToken).ConfigureAwait(false);
+                if (!result.Success)
+                {
+                    InjectionProblem?.Invoke(this, new InjectionProblemEventArgs(result.Failure, result.Message ?? "Не удалось вставить текст."));
+                    return false;
+                }
+
+                // Весь введённый текст теперь принадлежит последней фразе:
+                // именно её строка описывает то, что стоит в поле.
+                foreach (var context in _segments.Values)
+                {
+                    context.Segment.RecordInjection(string.Empty);
+                }
+
+                last.Segment.RecordInjection(result.InjectedText);
+                _sessionText = result.InjectedText;
+            }
+
+            return true;
+        }
+        finally
+        {
+            _injectionLock.Release();
+        }
+    }
+
+    private void RememberSessionAudio(byte[] audio)
+    {
+        if (audio.Length == 0)
+        {
+            return;
+        }
+
+        // Час диктовки — это больше сотни мегабайт звука. Предел заведомо выше
+        // обычного сеанса, но не даёт памяти расти бесконечно.
+        const long limitBytes = 200L * 1024 * 1024;
+
+        if (_sessionAudioBytes + audio.Length > limitBytes)
+        {
+            return;
+        }
+
+        _sessionAudio.Add(audio);
+        _sessionAudioBytes += audio.Length;
     }
 
     public DictationSegment? FindSegment(long segmentId) =>

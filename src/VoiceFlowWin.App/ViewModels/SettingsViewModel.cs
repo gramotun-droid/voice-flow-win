@@ -638,6 +638,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
             UsePreviousTextContext = source.Whisper.UsePreviousTextContext,
             MaxContextWords = source.Whisper.MaxContextWords,
             MaxParallelism = source.Whisper.MaxParallelism,
+            FullPassAfterStop = source.Whisper.FullPassAfterStop,
         },
         Injection = new InjectionSettings
         {

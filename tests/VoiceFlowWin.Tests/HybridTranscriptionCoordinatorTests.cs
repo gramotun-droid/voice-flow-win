@@ -138,6 +138,64 @@ public class HybridTranscriptionCoordinatorTests
     }
 
     [Fact]
+    public async Task Проход_по_всей_диктовке_заменяет_весь_введённый_текст()
+    {
+        var harness = new Harness(LiveTextMode.InsertAfterPause);
+
+        var first = await harness.DictateAsync(new[] { "первая фраза" }, "первая фраза");
+        await harness.ApplyWhisperAsync(first.SegmentId, "первая фраза");
+
+        var second = await harness.DictateAsync(new[] { "вторая фраза" }, "вторая фраза");
+        await harness.ApplyWhisperAsync(second.SegmentId, "вторая фраза");
+
+        var applied = await harness.Coordinator.ApplySessionCorrectionAsync(
+            "Первая фраза, вторая фраза.",
+            CancellationToken.None);
+
+        Assert.True(applied);
+        Assert.Equal("Первая фраза, вторая фраза.", harness.Field.Content);
+    }
+
+    [Fact]
+    public async Task Проход_по_всей_диктовке_не_трогает_текст_после_вмешательства()
+    {
+        var harness = new Harness(LiveTextMode.InsertAfterPause);
+
+        var segment = await harness.DictateAsync(new[] { "первая фраза" }, "первая фраза");
+        await harness.ApplyWhisperAsync(segment.SegmentId, "Первая фраза.");
+        var beforePass = harness.Field.Content;
+
+        // Пользователь щёлкнул в другом окне — трогать текст больше нельзя.
+        harness.Tracker.SwitchWindow();
+
+        var applied = await harness.Coordinator.ApplySessionCorrectionAsync(
+            "Совсем другой текст.",
+            CancellationToken.None);
+
+        Assert.False(applied);
+        Assert.Equal(beforePass, harness.Field.Content);
+    }
+
+    [Fact]
+    public async Task Звук_всей_диктовки_собирается_для_прохода()
+    {
+        var harness = new Harness(LiveTextMode.InsertAfterPause);
+        var audio = new byte[] { 1, 2, 3, 4 };
+
+        var segment = harness.Coordinator.BeginSegment(RecognitionLanguage.Russian);
+        await harness.Coordinator.OnPartialResultAsync(segment.SegmentId, "фраза", Start, CancellationToken.None);
+        await harness.Coordinator.EndSegmentAsync(segment.SegmentId, "фраза", audio, CancellationToken.None);
+
+        var second = harness.Coordinator.BeginSegment(RecognitionLanguage.Russian);
+        await harness.Coordinator.EndSegmentAsync(second.SegmentId, "вторая", audio, CancellationToken.None);
+
+        Assert.Equal(audio.Length * 2, harness.Coordinator.BuildSessionAudio().Length);
+
+        harness.Coordinator.EndSession();
+        Assert.Empty(harness.Coordinator.BuildSessionAudio());
+    }
+
+    [Fact]
     public async Task Сценарий_2_Whisper_заменяет_только_свой_сегмент()
     {
         var harness = new Harness();

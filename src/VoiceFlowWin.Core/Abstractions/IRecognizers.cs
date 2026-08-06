@@ -10,7 +10,7 @@ public sealed class PartialResultEventArgs : EventArgs
 }
 
 /// <summary>
-/// Потоковый распознаватель (Vosk): принимает аудио кусками и отдаёт
+/// Потоковый распознаватель (sherpa-onnx, Zipformer): принимает аудио кусками и отдаёт
 /// промежуточные гипотезы с задержкой в сотни миллисекунд.
 /// </summary>
 public interface IStreamingRecognizer : IDisposable
@@ -21,7 +21,7 @@ public interface IStreamingRecognizer : IDisposable
 
     event EventHandler<PartialResultEventArgs>? PartialResult;
 
-    /// <summary>Vosk сам решил, что фраза закончилась, и отдал финальный текст.</summary>
+    /// <summary>Распознаватель сам решил, что фраза закончилась, и отдал финальный текст.</summary>
     event EventHandler<PartialResultEventArgs>? FinalResult;
 
     /// <summary>Загружает модель нужного языка. Между сегментами вызывается заново только при смене языка.</summary>
@@ -39,7 +39,7 @@ public interface IStreamingRecognizer : IDisposable
 
 /// <summary>Запрос на финальное распознавание одного завершённого сегмента.</summary>
 /// <param name="SegmentId">Нужен, чтобы результат применился ровно к своему сегменту.</param>
-/// <param name="Pcm">Тот же аудиобуфер, который слышал Vosk.</param>
+/// <param name="Pcm">Тот же аудиобуфер, который слышал потоковый распознаватель.</param>
 /// <param name="Language">Язык сегмента; Auto означает автоопределение Whisper.</param>
 /// <param name="PreviousContext">Короткий текстовый контекст предыдущего сегмента или null.</param>
 public sealed record FinalRecognitionRequest(long SegmentId, byte[] Pcm, RecognitionLanguage Language, string? PreviousContext);

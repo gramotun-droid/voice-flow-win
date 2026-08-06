@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | `VoiceFlowWin.Core` | `net8.0` | Модели, состояния сегментов, обработка текста, координатор, оркестратор диктовки, настройки, словарь, команды, менеджер моделей |
 | `VoiceFlowWin.Audio` | `net8.0` | Кольцевой буфер, конвертация формата, VAD, сегментация речи |
-| `VoiceFlowWin.Vosk` | `net8.0` | Загрузка моделей и потоковое распознавание |
+| `VoiceFlowWin.SherpaOnnx` | `net8.0` | Загрузка моделей и потоковое распознавание |
 | `VoiceFlowWin.Whisper` | `net8.0` | Финальное распознавание через whisper.cpp и очередь задач |
 | `VoiceFlowWin.Windows` | `net8.0-windows` | Win32: ввод текста, хуки, хоткеи, буфер обмена, фокус, права, WASAPI |
 | `VoiceFlowWin.Updater` | `net8.0` | SemVer, манифест, загрузка и проверка пакетов, планировщик проверок |
@@ -31,7 +31,7 @@ WasapiAudioCaptureService
    │ PCM 16 kHz mono 16 bit (уже сконвертированный)
    ├──────────────► SpeechSegmenter ──► VAD ──► завершённый сегмент
    │                                              │
-   └──────────────► StreamingVoskRecognizer       │
+   └──────────────► StreamingZipformerRecognizer       │
                           │ промежуточные          │
                           ▼ гипотезы               ▼
                    StablePrefixProcessor    WhisperTranscriptionQueue
@@ -43,7 +43,7 @@ WasapiAudioCaptureService
                    TextInjectionService (SendInput / буфер обмена)
 ```
 
-Vosk и Whisper получают **один и тот же** звук: сегментатор отдаёт тот самый
+Zipformer и Whisper получают **один и тот же** звук: сегментатор отдаёт тот самый
 буфер, который слышал потоковый распознаватель, вместе с pre-roll.
 
 ## Ключевые решения
@@ -68,7 +68,7 @@ Vosk и Whisper получают **один и тот же** звук: сегм�
 
 ### Монотонный стабильный префикс
 
-Vosk свободно переписывает последние слова гипотезы: «новый система» на
+Zipformer свободно переписывает последние слова гипотезы: «новый система» на
 следующем шаге становится «новую систему». `StablePrefixProcessor` вводит слово
 только когда оно повторилось в нескольких гипотезах подряд либо достаточно
 долго не менялось, и при этом не входит в последние слова фразы.
@@ -141,8 +141,8 @@ Runtime: минус сотни мегабайт зависимостей и за
 
 ### Выпуск собирается только на Windows
 
-Пакеты `Vosk` и `Whisper.net.Runtime` выбирают native-библиотеки по
-операционной системе сборки, а не по целевому RID: `Vosk.targets` явно
+Пакеты `Zipformer` и `Whisper.net.Runtime` выбирают native-библиотеки по
+операционной системе сборки, а не по целевому RID: `Zipformer.targets` явно
 проверяет `IsOsPlatform(Windows)`. Кросс-сборка на Linux даёт рабочие
 managed-сборки, но кладёт рядом `libvosk.so` вместо `libvosk.dll`. Поэтому
 `dotnet publish` и сборка установщика в CI выполняются на `windows-latest`, а
@@ -166,7 +166,7 @@ Recording ──► Streaming ──► AwaitingFinalization ──► WhisperPr
 ```text
 settings.json      настройки
 dictionary.json    пользовательский словарь
-Models\            скачанные модели Vosk и Whisper
+Models\            скачанные модели Zipformer и Whisper
 Updates\           проверенные пакеты обновлений
 Logs\              технический лог без содержимого диктовки
 ```

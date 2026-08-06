@@ -2,7 +2,10 @@ namespace VoiceFlowWin.Core.Models;
 
 public enum ModelKind
 {
-    Vosk,
+    /// <summary>Потоковая модель распознавания (sherpa-onnx, Zipformer).</summary>
+    Streaming,
+
+    /// <summary>Модель финальной проверки фразы (whisper.cpp).</summary>
     Whisper,
 }
 
@@ -31,8 +34,8 @@ public sealed record ModelDescriptor(
     public IEnumerable<string> DownloadUrls =>
         FallbackUrls is null ? [Url] : new[] { Url }.Concat(FallbackUrls);
 
-    /// <summary>Vosk распространяется архивом, Whisper — одним файлом весов.</summary>
-    public bool IsArchive => Kind == ModelKind.Vosk;
+    /// <summary>Потоковая модель распространяется архивом, Whisper — одним файлом весов.</summary>
+    public bool IsArchive => Kind == ModelKind.Streaming;
 
     public string SizeText => ApproximateSizeBytes >= 1024L * 1024 * 1024
         ? $"{ApproximateSizeBytes / 1024.0 / 1024 / 1024:0.0} ГБ"
@@ -56,50 +59,39 @@ public sealed record ModelDescriptor(
 /// </remarks>
 public static class ModelCatalog
 {
-    private const string VoskMirror = "https://hf-mirror.com/rhasspy/vosk-models/resolve/main";
-    private const string VoskOrigin = "https://alphacephei.com/vosk/models";
+    /// <summary>Модели sherpa-onnx лежат в релизе проекта на GitHub.</summary>
+    /// <remarks>
+    /// GitHub отдаёт их быстро и без зеркал, в отличие от huggingface.co: у
+    /// части провайдеров тот выдаёт около килобайта в секунду.
+    /// </remarks>
+    private const string SherpaModels = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models";
+
     private const string WhisperMirror = "https://hf-mirror.com/ggerganov/whisper.cpp/resolve/main";
     private const string WhisperOrigin = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main";
 
     public static IReadOnlyList<ModelDescriptor> All { get; } = new[]
     {
         new ModelDescriptor(
-            "vosk-model-small-ru-0.22",
-            "Vosk русский, компактная",
-            ModelKind.Vosk,
+            "sherpa-onnx-streaming-zipformer-small-ru-vosk-int8-2025-08-16",
+            "Zipformer русский, компактная",
+            ModelKind.Streaming,
             RecognitionLanguage.Russian,
-            $"{VoskMirror}/ru/vosk-model-small-ru-0.22.zip",
-            46_236_750,
-            "Быстрая, подходит для потокового ввода на любом CPU.",
+            $"{SherpaModels}/sherpa-onnx-streaming-zipformer-small-ru-vosk-int8-2025-08-16.tar.bz2",
+            24_110_855,
+            "Квантованная, работает на любом процессоре и весит 24 МБ.",
             Recommended: true,
-            Sha256: "961D5FF98A17F4AA6DE69864D0AA71FA5BAC682301D2B5D17A3F24C5C99A46D4",
-            FallbackUrls: [$"{VoskOrigin}/vosk-model-small-ru-0.22.zip"]),
+            Sha256: "6BA68A01FF3C5445AAF2D61E9B97B026F1149DCC9049D11AF3F44F55176341D8"),
 
         new ModelDescriptor(
-            "vosk-model-ru-0.42",
-            "Vosk русский, полная",
-            ModelKind.Vosk,
-            RecognitionLanguage.Russian,
-            $"{VoskOrigin}/vosk-model-ru-0.42.zip",
-            1800L * 1024 * 1024,
-            "Точнее, но требует около 4 ГБ памяти. Зеркала нет: качается только с сайта Vosk, который часто отдаёт медленно, поэтому скачивание запускается вручную кнопкой «Скачать».",
-            Recommended: false,
-            // Единственный источник этой модели раздаёт её в разы медленнее
-            // остальных. В автоматической очереди она заняла бы её на часы,
-            // поэтому скачивается только по явной команде пользователя.
-            AutoDownload: false),
-
-        new ModelDescriptor(
-            "vosk-model-small-en-us-0.15",
-            "Vosk английский, компактная",
-            ModelKind.Vosk,
+            "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17",
+            "Zipformer английский, компактная",
+            ModelKind.Streaming,
             RecognitionLanguage.English,
-            $"{VoskMirror}/en/vosk-model-small-en-us-0.15.zip",
-            41_205_931,
-            "Быстрая, подходит для потокового ввода на любом CPU.",
+            $"{SherpaModels}/sherpa-onnx-streaming-zipformer-en-20M-2023-02-17.tar.bz2",
+            127_887_156,
+            "Компактная модель на 20M параметров, подходит для потокового ввода на любом CPU.",
             Recommended: true,
-            Sha256: "30F26242C4EB449F948E42CB302DD7A686CB29A3423A8367F99FF41780942498",
-            FallbackUrls: [$"{VoskOrigin}/vosk-model-small-en-us-0.15.zip"]),
+            Sha256: "9C559283E8498D3FE95913C79CA1CB454BB26281AC2B102B41306C7D752765D9"),
 
         new ModelDescriptor(
             "ggml-small-q5_1",

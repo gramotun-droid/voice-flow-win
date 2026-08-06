@@ -1,4 +1,6 @@
 using System.IO.Compression;
+using ICSharpCode.SharpZipLib.BZip2;
+using ICSharpCode.SharpZipLib.Tar;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
@@ -109,15 +111,15 @@ public sealed class ModelManager
     {
         var changed = false;
 
-        if (ClearMissing(settings.Vosk.RussianModelPath, Directory.Exists))
+        if (ClearMissing(settings.Streaming.RussianModelPath, Directory.Exists))
         {
-            settings.Vosk.RussianModelPath = string.Empty;
+            settings.Streaming.RussianModelPath = string.Empty;
             changed = true;
         }
 
-        if (ClearMissing(settings.Vosk.EnglishModelPath, Directory.Exists))
+        if (ClearMissing(settings.Streaming.EnglishModelPath, Directory.Exists))
         {
-            settings.Vosk.EnglishModelPath = string.Empty;
+            settings.Streaming.EnglishModelPath = string.Empty;
             changed = true;
         }
 
@@ -147,15 +149,15 @@ public sealed class ModelManager
             }
             else if (model.Language == RecognitionLanguage.English)
             {
-                if (string.IsNullOrWhiteSpace(settings.Vosk.EnglishModelPath))
+                if (string.IsNullOrWhiteSpace(settings.Streaming.EnglishModelPath))
                 {
-                    settings.Vosk.EnglishModelPath = path;
+                    settings.Streaming.EnglishModelPath = path;
                     changed = true;
                 }
             }
-            else if (string.IsNullOrWhiteSpace(settings.Vosk.RussianModelPath))
+            else if (string.IsNullOrWhiteSpace(settings.Streaming.RussianModelPath))
             {
-                settings.Vosk.RussianModelPath = path;
+                settings.Streaming.RussianModelPath = path;
                 changed = true;
             }
         }
@@ -262,10 +264,17 @@ public sealed class ModelManager
     }
 
     /// <summary>
-    /// Vosk ожидает каталог с файлами модели. Архивы обычно содержат один
+    /// Распаковывает архив модели в её каталог.
+    /// </summary>
+    /// <remarks>
+    /// Движок ожидает каталог с файлами модели. Архивы обычно содержат один
     /// верхний каталог — если так, поднимаем его содержимое на уровень выше,
     /// чтобы путь в настройках указывал прямо на модель.
-    /// </summary>
+    ///
+    /// Поддерживаются zip и tar.bz2: модели sherpa-onnx распространяются
+    /// только вторым форматом. В обоих случаях путь каждой записи проверяется:
+    /// архив не должен писать файлы за пределы своего каталога.
+    /// </remarks>
     internal static void ExtractArchiveSafely(string archivePath, string targetDirectory)
     {
         if (Directory.Exists(targetDirectory))
@@ -274,31 +283,72 @@ public sealed class ModelManager
         }
 
         Directory.CreateDirectory(targetDirectory);
-        var fullTarget = Path.GetFullPath(targetDirectory) + Path.DirectorySeparatorChar;
 
-        using (var archive = ZipFile.OpenRead(archivePath))
+        if (IsTarBzip2(archivePath))
         {
-            foreach (var entry in archive.Entries)
-            {
-                var destination = Path.GetFullPath(Path.Combine(targetDirectory, entry.FullName));
-
-                if (!destination.StartsWith(fullTarget, StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidDataException($"Архив модели пытается записать файл за пределы каталога: {entry.FullName}");
-                }
-
-                if (entry.FullName.EndsWith('/') || entry.FullName.EndsWith('\\'))
-                {
-                    Directory.CreateDirectory(destination);
-                    continue;
-                }
-
-                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-                entry.ExtractToFile(destination, overwrite: true);
-            }
+            ExtractTarBzip2(archivePath, targetDirectory);
+        }
+        else
+        {
+            ExtractZip(archivePath, targetDirectory);
         }
 
         FlattenSingleRootDirectory(targetDirectory);
+    }
+
+    /// <summary>Формат определяется по содержимому: расширение временного файла ничего не говорит.</summary>
+    private static bool IsTarBzip2(string archivePath)
+    {
+        using var stream = File.OpenRead(archivePath);
+        Span<byte> magic = stackalloc byte[3];
+        return stream.Read(magic) == 3 && magic[0] == (byte)'B' && magic[1] == (byte)'Z' && magic[2] == (byte)'h';
+    }
+
+    private static void ExtractZip(string archivePath, string targetDirectory)
+    {
+        var fullTarget = Path.GetFullPath(targetDirectory) + Path.DirectorySeparatorChar;
+
+        using var archive = ZipFile.OpenRead(archivePath);
+        foreach (var entry in archive.Entries)
+        {
+            var destination = Path.GetFullPath(Path.Combine(targetDirectory, entry.FullName));
+
+            if (!destination.StartsWith(fullTarget, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidDataException($"Архив модели пытается записать файл за пределы каталога: {entry.FullName}");
+            }
+
+            if (entry.FullName.EndsWith('/') || entry.FullName.EndsWith('\\'))
+            {
+                Directory.CreateDirectory(destination);
+                continue;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            entry.ExtractToFile(destination, overwrite: true);
+        }
+    }
+
+    private static void ExtractTarBzip2(string archivePath, string targetDirectory)
+    {
+        var fullTarget = Path.GetFullPath(targetDirectory) + Path.DirectorySeparatorChar;
+
+        using var file = File.OpenRead(archivePath);
+        using var bzip2 = new BZip2InputStream(file);
+        using var tar = TarArchive.CreateInputTarArchive(bzip2, System.Text.Encoding.UTF8);
+
+        // SharpZipLib сам не проверяет выход за пределы каталога, поэтому
+        // распаковка идёт через собственный обход записей.
+        tar.ProgressMessageEvent += (_, entry, _) =>
+        {
+            var destination = Path.GetFullPath(Path.Combine(targetDirectory, entry.Name));
+            if (!destination.StartsWith(fullTarget, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidDataException($"Архив модели пытается записать файл за пределы каталога: {entry.Name}");
+            }
+        };
+
+        tar.ExtractContents(targetDirectory);
     }
 
     private static void FlattenSingleRootDirectory(string targetDirectory)

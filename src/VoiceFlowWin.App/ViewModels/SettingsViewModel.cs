@@ -156,7 +156,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<ModelItemViewModel> Models { get; }
 
-    /// <summary>Скачанные русские модели Vosk для выбора на вкладке «Распознавание».</summary>
+    /// <summary>Скачанные русские потоковые модели для выбора на вкладке «Распознавание».</summary>
     public ObservableCollection<ModelChoice> RussianModelChoices { get; }
 
     public ObservableCollection<ModelChoice> EnglishModelChoices { get; }
@@ -393,13 +393,13 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         }
         else if (descriptor.Language == RecognitionLanguage.English)
         {
-            Draft.Vosk.EnglishModelPath = path;
-            persisted.Vosk.EnglishModelPath = path;
+            Draft.Streaming.EnglishModelPath = path;
+            persisted.Streaming.EnglishModelPath = path;
         }
         else
         {
-            Draft.Vosk.RussianModelPath = path;
-            persisted.Vosk.RussianModelPath = path;
+            Draft.Streaming.RussianModelPath = path;
+            persisted.Streaming.RussianModelPath = path;
         }
 
         _settingsService.Save(persisted);
@@ -491,16 +491,16 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         // Очистка списка сбрасывает выбор в ComboBox, и привязка успевает
         // записать в настройки пустой путь — поэтому пути снимаются заранее и
         // возвращаются на место после перестроения.
-        var russian = Draft.Vosk.RussianModelPath;
-        var english = Draft.Vosk.EnglishModelPath;
+        var russian = Draft.Streaming.RussianModelPath;
+        var english = Draft.Streaming.EnglishModelPath;
         var whisper = Draft.Whisper.ModelPath;
 
-        Fill(RussianModelChoices, ModelKind.Vosk, RecognitionLanguage.Russian, russian);
-        Fill(EnglishModelChoices, ModelKind.Vosk, RecognitionLanguage.English, english);
+        Fill(RussianModelChoices, ModelKind.Streaming, RecognitionLanguage.Russian, russian);
+        Fill(EnglishModelChoices, ModelKind.Streaming, RecognitionLanguage.English, english);
         Fill(WhisperModelChoices, ModelKind.Whisper, null, whisper);
 
-        Draft.Vosk.RussianModelPath = russian;
-        Draft.Vosk.EnglishModelPath = english;
+        Draft.Streaming.RussianModelPath = russian;
+        Draft.Streaming.EnglishModelPath = english;
         Draft.Whisper.ModelPath = whisper;
         OnPropertyChanged(nameof(Draft));
     }
@@ -552,14 +552,14 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         Application.Current?.Dispatcher.BeginInvoke(() =>
         {
             var changed =
-                Draft.Vosk.RussianModelPath != settings.Vosk.RussianModelPath ||
-                Draft.Vosk.EnglishModelPath != settings.Vosk.EnglishModelPath ||
+                Draft.Streaming.RussianModelPath != settings.Streaming.RussianModelPath ||
+                Draft.Streaming.EnglishModelPath != settings.Streaming.EnglishModelPath ||
                 Draft.Whisper.ModelPath != settings.Whisper.ModelPath;
 
             if (changed)
             {
-                Draft.Vosk.RussianModelPath = settings.Vosk.RussianModelPath;
-                Draft.Vosk.EnglishModelPath = settings.Vosk.EnglishModelPath;
+                Draft.Streaming.RussianModelPath = settings.Streaming.RussianModelPath;
+                Draft.Streaming.EnglishModelPath = settings.Streaming.EnglishModelPath;
                 Draft.Whisper.ModelPath = settings.Whisper.ModelPath;
                 Draft.Whisper.ModelId = settings.Whisper.ModelId;
                 OnPropertyChanged(nameof(Draft));
@@ -620,14 +620,14 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
             GainDb = source.Microphone.GainDb,
             NoiseSuppression = source.Microphone.NoiseSuppression,
         },
-        Vosk = new VoskSettings
+        Streaming = new StreamingSettings
         {
-            RussianModelPath = source.Vosk.RussianModelPath,
-            EnglishModelPath = source.Vosk.EnglishModelPath,
-            PartialResultIntervalMs = source.Vosk.PartialResultIntervalMs,
-            StableRepeats = source.Vosk.StableRepeats,
-            StabilityDelayMs = source.Vosk.StabilityDelayMs,
-            VolatileTailWords = source.Vosk.VolatileTailWords,
+            RussianModelPath = source.Streaming.RussianModelPath,
+            EnglishModelPath = source.Streaming.EnglishModelPath,
+            PartialResultIntervalMs = source.Streaming.PartialResultIntervalMs,
+            StableRepeats = source.Streaming.StableRepeats,
+            StabilityDelayMs = source.Streaming.StabilityDelayMs,
+            VolatileTailWords = source.Streaming.VolatileTailWords,
         },
         Whisper = new WhisperSettings
         {

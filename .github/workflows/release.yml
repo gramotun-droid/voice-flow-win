@@ -142,7 +142,7 @@ jobs:
           # Список лицензий собирается из метаданных восстановленных пакетов.
           $licenses = @('Сторонние компоненты VoiceFlowWin', '')
           $packages = @(
-            'Vosk (Apache-2.0) — потоковое распознавание речи',
+            'sherpa-onnx (Apache-2.0) — потоковое распознавание речи',
             'Whisper.net и Whisper.net.Runtime (MIT) — обёртка whisper.cpp',
             'whisper.cpp (MIT) — финальное распознавание',
             'NAudio (MIT) — захват звука через WASAPI',

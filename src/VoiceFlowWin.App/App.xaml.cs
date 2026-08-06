@@ -218,7 +218,9 @@ public partial class App : Application
 
         services.AddLogging(builder =>
         {
-            builder.SetMinimumLevel(LogLevel.Information);
+            // Debug включён намеренно: без промежуточных гипотез по логу
+            // нельзя понять, что приложение услышало и где потеряло текст.
+            builder.SetMinimumLevel(LogLevel.Debug);
             // Технический лог не содержит содержимого диктовки: в него пишутся
             // только состояния и ошибки.
             builder.AddProvider(new FileLoggerProvider(Path.Combine(paths.LogsDirectory, "voiceflowwin.log")));

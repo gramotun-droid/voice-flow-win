@@ -66,6 +66,14 @@ public sealed class DictationController : IAsyncDisposable
     private readonly CancellationTokenSource _shutdown = new();
     private readonly Task _pump;
 
+    /// <summary>Сколько ждать результата прохода по всей диктовке.</summary>
+    private static readonly TimeSpan FullPassTimeout = TimeSpan.FromMinutes(2);
+
+    /// <summary>Сколько ждать, пока применятся результаты уже отправленных фраз.</summary>
+    private static readonly TimeSpan PendingResultsTimeout = TimeSpan.FromSeconds(30);
+
+    private static readonly TimeSpan PendingResultsPollInterval = TimeSpan.FromMilliseconds(100);
+
     private long? _currentSegmentId;
 
     /// <summary>Окно, в котором началась текущая диктовка.</summary>
@@ -264,6 +272,7 @@ public sealed class DictationController : IAsyncDisposable
         _segmenter.ForceComplete(reason);
         await Task.Yield();
 
+        await WaitForPendingResultsAsync(cancellationToken).ConfigureAwait(false);
         await RunFullPassAsync(cancellationToken).ConfigureAwait(false);
 
         _coordinator.EndSession();
@@ -281,32 +290,71 @@ public sealed class DictationController : IAsyncDisposable
     {
         if (!_settings.Current.Whisper.FullPassAfterStop)
         {
+            _logger.LogInformation("Проход по всей диктовке выключен в настройках.");
             return;
         }
 
         var audio = _coordinator.BuildSessionAudio();
-        if (audio.Length == 0 || _coordinator.SessionInjectedText.Length == 0)
+        var injected = _coordinator.SessionInjectedText;
+        if (audio.Length == 0 || injected.Length == 0)
         {
+            _logger.LogInformation(
+                "Проход по всей диктовке пропущен: звука {AudioBytes} Б, введено {InjectedLength} символов.",
+                audio.Length,
+                injected.Length);
             return;
         }
 
         FullPassRunningChanged?.Invoke(this, true);
+        var started = DateTimeOffset.UtcNow;
+
         try
         {
+            var language = ResolveLanguage(_sessionFocus);
+            _logger.LogInformation(
+                "Проход по всей диктовке начат: {Seconds:0.0} с звука, язык {Language}, в поле {InjectedLength} символов.",
+                audio.Length / (double)(AudioFormat.SampleRate * AudioFormat.BytesPerSample),
+                language,
+                injected.Length);
+
+            // Время прохода ограничено: Whisper на длинной записи может считать
+            // минутами, а всё это время пользователь видит «Финализация» и
+            // курсор ожидания. Лучше отказаться от прохода, чем висеть.
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(FullPassTimeout);
+
             var request = new FinalRecognitionRequest(
                 SegmentId: 0,
                 Pcm: audio,
-                Language: ResolveLanguage(_sessionFocus),
+                Language: language,
                 PreviousContext: null);
 
-            var result = await _finalQueue.TranscribeNowAsync(request, cancellationToken).ConfigureAwait(false);
+            var result = await _finalQueue.TranscribeNowAsync(request, timeout.Token).ConfigureAwait(false);
             if (!result.Succeeded || result.Text.Length == 0)
             {
-                _logger.LogInformation("Проход по всей диктовке не дал результата: {Error}", result.Error);
+                _logger.LogWarning(
+                    "Проход по всей диктовке не дал результата за {Elapsed}: {Error}",
+                    DateTimeOffset.UtcNow - started,
+                    result.Error ?? "пустой текст");
                 return;
             }
 
-            await _coordinator.ApplySessionCorrectionAsync(result.Text, cancellationToken).ConfigureAwait(false);
+            _logger.LogInformation(
+                "Проход по всей диктовке распознал за {Elapsed}: «{Text}»",
+                DateTimeOffset.UtcNow - started,
+                result.Text);
+
+            var applied = await _coordinator.ApplySessionCorrectionAsync(result.Text, timeout.Token).ConfigureAwait(false);
+            _logger.LogInformation(
+                applied
+                    ? "Текст диктовки заменён результатом полного прохода."
+                    : "Замена по результату полного прохода не выполнена.");
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(
+                "Проход по всей диктовке прерван по таймауту {Timeout}. В поле остался пофразный результат.",
+                FullPassTimeout);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -316,6 +364,29 @@ public sealed class DictationController : IAsyncDisposable
         finally
         {
             FullPassRunningChanged?.Invoke(this, false);
+        }
+    }
+
+    /// <summary>Ждёт, пока применятся результаты уже отправленных фраз.</summary>
+    /// <remarks>
+    /// Полный проход заменяет весь введённый текст, поэтому он обязан начаться
+    /// после того, как последние фразы окажутся в поле. Иначе запоздавший
+    /// результат фразы допишется поверх уже заменённого текста.
+    /// </remarks>
+    private async Task WaitForPendingResultsAsync(CancellationToken cancellationToken)
+    {
+        var deadline = DateTimeOffset.UtcNow + PendingResultsTimeout;
+
+        while (_finalQueue.PendingCount > 0 && DateTimeOffset.UtcNow < deadline)
+        {
+            await Task.Delay(PendingResultsPollInterval, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (_finalQueue.PendingCount > 0)
+        {
+            _logger.LogWarning(
+                "Ожидание последних фраз прервано по таймауту: в очереди осталось {Pending}.",
+                _finalQueue.PendingCount);
         }
     }
 
@@ -366,6 +437,13 @@ public sealed class DictationController : IAsyncDisposable
         }
 
         var voskFinal = _streaming.FlushFinalResult();
+        _logger.LogInformation(
+            "Фраза {SegmentId} закрыта ({Reason}): потоковая модель услышала «{Text}», звука {Seconds:0.0} с.",
+            segmentId,
+            e.Reason,
+            voskFinal,
+            e.Pcm.Length / (double)(AudioFormat.SampleRate * AudioFormat.BytesPerSample));
+
         await _coordinator.EndSegmentAsync(segmentId, voskFinal, e.Pcm, token).ConfigureAwait(false);
 
         var segment = _coordinator.FindSegment(segmentId);
@@ -375,11 +453,16 @@ public sealed class DictationController : IAsyncDisposable
                 ? RecognitionLanguage.Auto
                 : segment.Language;
 
-            _finalQueue.Enqueue(new FinalRecognitionRequest(
+            var context = _coordinator.BuildWhisperContext();
+            var accepted = _finalQueue.Enqueue(new FinalRecognitionRequest(segmentId, e.Pcm, language, context));
+
+            _logger.LogInformation(
+                "Фраза {SegmentId} отправлена в Whisper: язык {Language}, контекст «{Context}», принята: {Accepted}, в очереди {Pending}.",
                 segmentId,
-                e.Pcm,
                 language,
-                _coordinator.BuildWhisperContext()));
+                context ?? string.Empty,
+                accepted,
+                _finalQueue.PendingCount);
         }
 
         _currentSegmentId = null;
@@ -393,6 +476,14 @@ public sealed class DictationController : IAsyncDisposable
 
     private void OnFinalResultReady(object? sender, FinalRecognitionResult result) => Post(async token =>
     {
+        _logger.LogInformation(
+            "Whisper вернул для фразы {SegmentId} за {Duration}: успех {Succeeded}, текст «{Text}»{Error}",
+            result.SegmentId,
+            result.Duration,
+            result.Succeeded,
+            result.Text,
+            result.Error is null ? string.Empty : ", ошибка: " + result.Error);
+
         await _coordinator.ApplyFinalRecognitionAsync(result, token).ConfigureAwait(false);
     });
 
@@ -507,6 +598,7 @@ public sealed class DictationController : IAsyncDisposable
 
     private void SetState(DictationState state, string? message = null)
     {
+        _logger.LogInformation("Состояние: {State}{Message}", state, message is null ? string.Empty : " — " + message);
         State = state;
         StateChanged?.Invoke(this, new DictationStateEventArgs(state, message));
     }

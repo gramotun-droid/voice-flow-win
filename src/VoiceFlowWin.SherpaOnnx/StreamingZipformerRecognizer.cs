@@ -171,6 +171,7 @@ public sealed class StreamingZipformerRecognizer : IStreamingRecognizer
         }
 
         _lastPartial = partial;
+        _logger.LogDebug("Гипотеза: «{Text}»", partial);
         PartialResult?.Invoke(this, new PartialResultEventArgs(partial));
     }
 
@@ -194,6 +195,7 @@ public sealed class StreamingZipformerRecognizer : IStreamingRecognizer
                 }
 
                 var text = _recognizer.GetResult(_stream).Text.Trim();
+                _logger.LogInformation("Потоковая модель завершила фразу: «{Text}»", text);
 
                 _stream.Dispose();
                 _stream = _recognizer.CreateStream();

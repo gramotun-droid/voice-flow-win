@@ -47,6 +47,17 @@ public sealed class WhisperTranscriptionQueue : IFinalRecognitionQueue, IAsyncDi
     /// <summary>Сегмент распознан; результат нужно применить к его SegmentId.</summary>
     public event EventHandler<FinalRecognitionResult>? ResultReady;
 
+    /// <inheritdoc />
+    public async Task<FinalRecognitionResult> TranscribeNowAsync(FinalRecognitionRequest request, CancellationToken cancellationToken)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        // Распознаватель сам сериализует вызовы, поэтому очередь фраз здесь
+        // обходится намеренно: проход по всей диктовке идёт вне её порядка.
+        await _recognizer.PrepareAsync(cancellationToken).ConfigureAwait(false);
+        return await _recognizer.TranscribeAsync(request, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Сколько сегментов ждёт обработки — для индикатора в overlay.</summary>
     public int PendingCount => Volatile.Read(ref _pendingCount);
 

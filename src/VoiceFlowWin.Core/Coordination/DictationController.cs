@@ -119,6 +119,14 @@ public sealed class DictationController : IAsyncDisposable
 
     public event EventHandler<AudioLevelInfo>? LevelChanged;
 
+    /// <summary>Идёт ли сейчас проход по всей диктовке.</summary>
+    /// <remarks>
+    /// Пока он идёт, приложение переписывает уже введённый текст, поэтому
+    /// интерфейс показывает курсор ожидания: правка пользователем в этот
+    /// момент привела бы к отказу от замены и потере результата.
+    /// </remarks>
+    public event EventHandler<bool>? FullPassRunningChanged;
+
     /// <summary>Регистрирует горячую клавишу. Вызывается при старте и после изменения настроек.</summary>
     public bool ApplyHotkeySettings()
     {
@@ -256,8 +264,59 @@ public sealed class DictationController : IAsyncDisposable
         _segmenter.ForceComplete(reason);
         await Task.Yield();
 
+        await RunFullPassAsync(cancellationToken).ConfigureAwait(false);
+
         _coordinator.EndSession();
         SetState(DictationState.Idle);
+    }
+
+    /// <summary>Прогоняет всю диктовку целиком и заменяет введённый текст.</summary>
+    /// <remarks>
+    /// Отдельные фразы уже исправлены, но между собой они не согласованы:
+    /// Whisper видел каждую по отдельности. Проход по всей записи видит их
+    /// вместе — отсюда общая пунктуация и формы слов. Любая ошибка прохода
+    /// оставляет пофразный результат нетронутым: он уже в поле.
+    /// </remarks>
+    private async Task RunFullPassAsync(CancellationToken cancellationToken)
+    {
+        if (!_settings.Current.Whisper.FullPassAfterStop)
+        {
+            return;
+        }
+
+        var audio = _coordinator.BuildSessionAudio();
+        if (audio.Length == 0 || _coordinator.SessionInjectedText.Length == 0)
+        {
+            return;
+        }
+
+        FullPassRunningChanged?.Invoke(this, true);
+        try
+        {
+            var request = new FinalRecognitionRequest(
+                SegmentId: 0,
+                Pcm: audio,
+                Language: ResolveLanguage(_sessionFocus),
+                PreviousContext: null);
+
+            var result = await _finalQueue.TranscribeNowAsync(request, cancellationToken).ConfigureAwait(false);
+            if (!result.Succeeded || result.Text.Length == 0)
+            {
+                _logger.LogInformation("Проход по всей диктовке не дал результата: {Error}", result.Error);
+                return;
+            }
+
+            await _coordinator.ApplySessionCorrectionAsync(result.Text, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Пофразный результат уже в поле — отказ прохода ничего не портит.
+            _logger.LogWarning(ex, "Проход по всей диктовке не выполнен.");
+        }
+        finally
+        {
+            FullPassRunningChanged?.Invoke(this, false);
+        }
     }
 
     private void OnFrameCaptured(object? sender, AudioFrameEventArgs e)

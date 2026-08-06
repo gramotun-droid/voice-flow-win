@@ -34,6 +34,7 @@ public partial class App : Application
     private OverlayWindow? _overlay;
     private SettingsWindow? _settingsWindow;
     private CancellationTokenSource? _modelDownloads;
+    private BusyCursorScope? _busyCursor;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -90,6 +91,21 @@ public partial class App : Application
         _overlay = _services.GetRequiredService<OverlayWindow>();
         _overlay.SyncVisibility();
 
+        // Пока идёт проход по всей диктовке, курсор показывает занятость:
+        // ручная правка в этот момент отменила бы замену текста.
+        controller.FullPassRunningChanged += (_, running) => Dispatcher.BeginInvoke(() =>
+        {
+            if (running)
+            {
+                _busyCursor ??= BusyCursorScope.Begin(_services.GetRequiredService<ILogger<App>>());
+            }
+            else
+            {
+                _busyCursor?.Dispose();
+                _busyCursor = null;
+            }
+        });
+
         _tray = _services.GetRequiredService<TrayIconHost>();
         _tray.ShowSettingsRequested += (_, _) => ShowSettings();
         _tray.ToggleDictationRequested += (_, _) => controller.Toggle();
@@ -132,6 +148,10 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        // Системный курсор — общий ресурс: оставить его «песочными часами»
+        // после выхода нельзя.
+        _busyCursor?.Dispose();
+
         // Незавершённая загрузка модели прерывается: временный файл останется
         // в каталоге обновлений моделей и будет перекачан при следующем старте.
         _modelDownloads?.Cancel();

@@ -208,6 +208,11 @@
                         <TextBlock Text="Потоков CPU" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
                         <TextBox Text="{Binding Draft.Whisper.CpuThreads}" Width="120" HorizontalAlignment="Left" />
 
+                        <CheckBox Content="После остановки диктовки прогонять всю запись целиком" Margin="0,8,0,0"
+                                  IsChecked="{Binding Draft.Whisper.FullPassAfterStop}" />
+                        <TextBlock Style="{StaticResource MutedText}" Margin="22,0,0,6"
+                                   Text="Проход по всей диктовке согласует пунктуацию и формы слов между фразами. Пока он идёт, курсор показывает занятость: правка текста в этот момент отменит замену." />
+
                         <CheckBox Content="Передавать Whisper контекст предыдущей фразы" Margin="0,8,0,0"
                                   IsChecked="{Binding Draft.Whisper.UsePreviousTextContext}" />
                         <TextBlock Style="{StaticResource MutedText}"

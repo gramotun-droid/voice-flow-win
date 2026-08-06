@@ -63,11 +63,25 @@ public sealed class ZipformerModelLoader : IDisposable
             }
 
             var files = ResolveFiles(modelPath, language);
-            _logger.LogInformation("Загрузка модели Zipformer {Language} из {Path}", language, modelPath);
+
+            // Пути и размеры пишутся до вызова native-кода: если он уронит
+            // процесс, в логе останется, с какими именно файлами это случилось.
+            _logger.LogInformation(
+                "Загрузка модели Zipformer {Language}: encoder={Encoder} ({EncoderSize} Б), decoder={Decoder} ({DecoderSize} Б), joiner={Joiner} ({JoinerSize} Б), tokens={Tokens}",
+                language,
+                files.Encoder,
+                new FileInfo(files.Encoder).Length,
+                files.Decoder,
+                new FileInfo(files.Decoder).Length,
+                files.Joiner,
+                new FileInfo(files.Joiner).Length,
+                files.Tokens);
 
             var recognizer = await Task
                 .Run(() => Create(files, threads), cancellationToken)
                 .ConfigureAwait(false);
+
+            _logger.LogInformation("Модель Zipformer {Language} загружена.", language);
 
             _recognizers[language] = recognizer;
             return recognizer;
@@ -95,6 +109,17 @@ public sealed class ZipformerModelLoader : IDisposable
             throw new InvalidOperationException(
                 $"Каталог модели для {LanguageName(language)} языка неполон: нужны encoder, decoder, joiner и tokens.txt. " +
                 "Скачайте модель заново в настройках, вкладка «Модели».");
+        }
+
+        // Пустой или обрезанный файл native-код читает уже без проверок и
+        // роняет процесс целиком, поэтому размер проверяется заранее.
+        foreach (var file in new[] { encoder, decoder, joiner, tokens })
+        {
+            if (new FileInfo(file).Length == 0)
+            {
+                throw new InvalidOperationException(
+                    $"Файл модели пуст: {file}. Скачайте модель заново в настройках, вкладка «Модели».");
+            }
         }
 
         return new ZipformerModelFiles(encoder, decoder, joiner, tokens);
@@ -136,7 +161,12 @@ public sealed class ZipformerModelLoader : IDisposable
         // Определение конца фразы остаётся за VAD приложения: он видит звук
         // целиком и одинаково работает для обоих распознавателей. Здесь
         // endpoint выключен, иначе границы фраз считались бы дважды и по-разному.
+        // Правила всё равно заполняются: native-код читает их независимо от
+        // флага, а нули в них — не то значение, на которое он рассчитан.
         config.EnableEndpoint = 0;
+        config.Rule1MinTrailingSilence = 2.4f;
+        config.Rule2MinTrailingSilence = 1.2f;
+        config.Rule3MinUtteranceLength = 20.0f;
 
         return new OnlineRecognizer(config);
     }

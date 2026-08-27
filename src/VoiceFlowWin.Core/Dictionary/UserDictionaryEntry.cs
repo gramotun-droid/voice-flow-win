@@ -5,7 +5,7 @@ namespace VoiceFlowWin.Core.Dictionary;
 /// <summary>Одна запись пользовательского словаря замен.</summary>
 public sealed class UserDictionaryEntry
 {
-    /// <summary>Как это звучит и как распознаёт Vosk: «гитхаб», «пул реквест».</summary>
+    /// <summary>Как это звучит и как распознаёт потоковая модель: «гитхаб», «пул реквест».</summary>
     public string SpokenForm { get; set; } = string.Empty;
 
     /// <summary>Как это должно быть записано: <c>GitHub</c>, <c>pull request</c>.</summary>
@@ -42,7 +42,7 @@ public sealed class UserDictionaryEntry
     }
 }
 
-/// <summary>Словарь по умолчанию: термины, на которых Vosk ошибается чаще всего.</summary>
+/// <summary>Словарь по умолчанию: термины, на которых ASR ошибается чаще всего.</summary>
 public static class DefaultDictionary
 {
     public static List<UserDictionaryEntry> Create() => new()

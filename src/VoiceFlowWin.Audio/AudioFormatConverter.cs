@@ -7,7 +7,7 @@ namespace VoiceFlowWin.Audio;
 /// </summary>
 /// <remarks>
 /// WASAPI в shared mode отдаёт то, что настроено в системе: обычно 32-битный
-/// float, 44.1 или 48 kHz, стерео. И Vosk, и whisper.cpp ждут 16 kHz mono.
+/// float, 44.1 или 48 kHz, стерео. И Zipformer, и whisper.cpp ждут 16 kHz mono.
 /// Преобразование сделано вручную, а не средствами NAudio, чтобы его можно
 /// было покрыть тестами на любой платформе.
 /// </remarks>

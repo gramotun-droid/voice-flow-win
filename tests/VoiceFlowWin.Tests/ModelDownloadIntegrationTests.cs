@@ -1,6 +1,7 @@
 using System.Net.Http;
 using VoiceFlowWin.Core.Models;
 using VoiceFlowWin.Core.Settings;
+using VoiceFlowWin.SherpaEngine;
 using Xunit;
 
 namespace VoiceFlowWin.Tests;
@@ -29,10 +30,10 @@ public sealed class ModelDownloadIntegrationTests : IDisposable
         }
     }
 
-    [Fact(Skip = "Требует сети и качает ~40 МБ; запускать вручную.")]
-    public async Task Английская_модель_скачивается_и_проходит_проверку()
+    [ModelIntegrationFact]
+    public async Task Английская_Zipformer_модель_скачивается_и_проходит_проверку()
     {
-        var model = ModelCatalog.Find("vosk-model-small-en-us-0.15")!;
+        var model = ModelCatalog.Find("sherpa-onnx-streaming-zipformer-en-20M-2023-02-17")!;
         var manager = new ModelManager(new HttpClient { Timeout = TimeSpan.FromMinutes(30) }, _paths);
 
         var stages = new List<string>();
@@ -44,7 +45,10 @@ public sealed class ModelDownloadIntegrationTests : IDisposable
         Assert.True(manager.IsInstalled(model));
         Assert.Contains(stages, stage => stage.StartsWith("Загрузка", StringComparison.Ordinal));
 
-        // Vosk ожидает каталог с файлами модели, а не вложенный каталог архива.
-        Assert.True(File.Exists(Path.Combine(result.Path!, "am", "final.mdl")));
+        var files = ZipformerModelLoader.ResolveFiles(result.Path!, RecognitionLanguage.English);
+        Assert.True(File.Exists(files.Encoder));
+        Assert.True(File.Exists(files.Decoder));
+        Assert.True(File.Exists(files.Joiner));
+        Assert.True(File.Exists(files.Tokens));
     }
 }

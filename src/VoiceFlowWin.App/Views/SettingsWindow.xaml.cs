@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Input;
 using Microsoft.Win32;
 using VoiceFlowWin.App.ViewModels;
+using VoiceFlowWin.Core.History;
 using VoiceFlowWin.Core.Settings;
 using VoiceFlowWin.Updater;
 
@@ -13,12 +14,18 @@ public partial class SettingsWindow : Window
 {
     private readonly SettingsViewModel _viewModel;
     private readonly AppPaths _paths;
+    private readonly IDictationHistoryStore _history;
     private readonly UpdateService _updates;
 
-    public SettingsWindow(SettingsViewModel viewModel, AppPaths paths, UpdateService updates)
+    public SettingsWindow(
+        SettingsViewModel viewModel,
+        AppPaths paths,
+        IDictationHistoryStore history,
+        UpdateService updates)
     {
         _viewModel = viewModel;
         _paths = paths;
+        _history = history;
         _updates = updates;
 
         InitializeComponent();
@@ -135,7 +142,7 @@ public partial class SettingsWindow : Window
         Process.Start(new ProcessStartInfo(_paths.Root) { UseShellExecute = true });
     }
 
-    private void OnClearHistoryClick(object sender, RoutedEventArgs e)
+    private async void OnClearHistoryClick(object sender, RoutedEventArgs e)
     {
         var confirmation = MessageBox.Show(
             "Удалить сохранённую историю диктовок?",
@@ -150,14 +157,10 @@ public partial class SettingsWindow : Window
 
         try
         {
-            if (File.Exists(_paths.HistoryFile))
-            {
-                File.Delete(_paths.HistoryFile);
-            }
-
+            await _history.ClearAsync(CancellationToken.None);
             MessageBox.Show("История удалена.", "VoiceFlowWin", MessageBoxButton.OK, MessageBoxImage.Information);
         }
-        catch (IOException ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             MessageBox.Show("Не удалось удалить историю: " + ex.Message, "VoiceFlowWin", MessageBoxButton.OK, MessageBoxImage.Warning);
         }

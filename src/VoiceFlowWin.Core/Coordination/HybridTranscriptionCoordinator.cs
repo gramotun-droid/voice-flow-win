@@ -180,14 +180,14 @@ public sealed class HybridTranscriptionCoordinator
     /// Закрывает сегмент: финальный текст потоковой модели дописывается целиком, включая
     /// изменяемый хвост, который в безопасном режиме был только в overlay.
     /// </summary>
-    public async Task EndSegmentAsync(long segmentId, string? voskFinalText, byte[] audio, CancellationToken cancellationToken)
+    public async Task EndSegmentAsync(long segmentId, string? streamingFinalText, byte[] audio, CancellationToken cancellationToken)
     {
         if (!_segments.TryGetValue(segmentId, out var context) || context.Segment.State.IsTerminal())
         {
             return;
         }
 
-        var update = context.Prefix.Finalize(voskFinalText, DateTimeOffset.UtcNow);
+        var update = context.Prefix.Finalize(streamingFinalText, DateTimeOffset.UtcNow);
         context.Segment.RecordHypothesis(update.StableText, update.StableText, string.Empty);
         context.Segment.SetAudio(audio);
         RememberSessionAudio(audio);
@@ -440,7 +440,10 @@ public sealed class HybridTranscriptionCoordinator
             : string.Empty;
 
         var desired = separator + normalized;
-        _logger.LogInformation("Финальный проход заменяет «{Injected}» на «{Corrected}».", injected, desired);
+        _logger.LogInformation(
+            "Финальный проход заменяет {InjectedLength} текстовых элементов на {CorrectedLength}.",
+            TextElements.Count(injected),
+            TextElements.Count(desired));
 
         await _injectionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -625,12 +628,12 @@ public sealed class HybridTranscriptionCoordinator
 
             var plan = TextDiffProcessor.ComputeTailReplacement(segment.InjectedText, desired, segment.InjectedLength);
             _logger.LogInformation(
-                "Фраза {SegmentId}: в поле «{Injected}» → «{Desired}», удалить {Backspaces}, напечатать «{ToType}».",
+                "Фраза {SegmentId}: было {InjectedLength} элементов, станет {DesiredLength}; удалить {Backspaces}, напечатать {ToTypeLength}.",
                 segment.SegmentId,
-                segment.InjectedText,
-                desired,
+                segment.InjectedLength,
+                TextElements.Count(desired),
                 plan.BackspaceCount,
-                plan.TextToType);
+                TextElements.Count(plan.TextToType));
             if (plan.IsNoOp)
             {
                 // Правка потребовала бы удалить чужой текст — отказываемся.

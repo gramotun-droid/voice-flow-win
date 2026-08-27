@@ -51,13 +51,30 @@ jobs:
           }
 
           "version=$version" >> $env:GITHUB_OUTPUT
+          "version_core=$($version.Split('-')[0])" >> $env:GITHUB_OUTPUT
           Write-Host "Версия выпуска: $version"
+
+      - name: Политика подписи
+        shell: pwsh
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          if ([string]::IsNullOrWhiteSpace($env:SIGNING_CERTIFICATE)) {
+            if ($version -notmatch '-') {
+              Write-Error "Стабильный релиз нельзя публиковать без SIGNING_CERTIFICATE. Выпустите prerelease или настройте сертификат."
+              exit 1
+            }
+
+            Write-Warning "Prerelease будет опубликован без подписи: сертификат не настроен."
+          }
 
       - name: Restore
         run: dotnet restore VoiceFlowWin.sln
 
       - name: Сборка Release
-        run: dotnet build VoiceFlowWin.sln --configuration Release --no-restore -p:Version=${{ steps.version.outputs.version }}
+        run: >
+          dotnet build VoiceFlowWin.sln --configuration Release --no-restore
+          -p:Version=${{ steps.version.outputs.version }}
+          -p:VersionPrefix=${{ steps.version.outputs.version_core }}
 
       - name: Тесты
         run: |
@@ -69,12 +86,37 @@ jobs:
           dotnet publish src/VoiceFlowWin.App/VoiceFlowWin.App.csproj
           --configuration Release --runtime win-x64 --self-contained false
           --output publish -p:Version=${{ steps.version.outputs.version }}
+          -p:VersionPrefix=${{ steps.version.outputs.version_core }}
 
       - name: Публикация updater
         run: >
           dotnet publish src/VoiceFlowWin.UpdaterHost/VoiceFlowWin.UpdaterHost.csproj
           --configuration Release --runtime win-x64 --self-contained false
           --output publish -p:Version=${{ steps.version.outputs.version }}
+          -p:VersionPrefix=${{ steps.version.outputs.version_core }}
+
+      - name: Подпись приложения и updater
+        if: ${{ env.SIGNING_CERTIFICATE != '' }}
+        shell: pwsh
+        run: |
+          $bytes = [Convert]::FromBase64String($env:SIGNING_CERTIFICATE)
+          $pfx = Join-Path $env:RUNNER_TEMP 'signing-apps.pfx'
+          [IO.File]::WriteAllBytes($pfx, $bytes)
+
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+            Where-Object { $_.FullName -like '*x64*' } | Select-Object -First 1
+
+          if ($null -eq $signtool) {
+            Write-Error "signtool.exe не найден."
+            exit 1
+          }
+
+          @('publish\VoiceFlowWin.exe', 'publish\VoiceFlowWin.UpdaterHost.exe') | ForEach-Object {
+            & $signtool.FullName sign /f $pfx /p $env:SIGNING_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $_
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+          Remove-Item $pfx -Force
 
       - name: Portable-архив
         shell: pwsh
@@ -92,9 +134,9 @@ jobs:
           & $iscc /DMyAppVersion=${{ steps.version.outputs.version }} installer\voiceflowwin.iss
           Copy-Item "installer_output\VoiceFlowWin-Setup-x64-${{ steps.version.outputs.version }}.exe" artifacts\
 
-      # Подпись выполняется только при наличии сертификата в секретах.
-      # Без него сборка не падает, но помечается как unsigned.
-      - name: Подпись артефактов
+      # Stable без сертификата остановлен политикой выше; prerelease можно
+      # собрать unsigned, и это явно попадёт в update-manifest.json.
+      - name: Подпись установщика
         id: sign
         if: ${{ env.SIGNING_CERTIFICATE != '' }}
         shell: pwsh
@@ -108,9 +150,26 @@ jobs:
 
           & $signtool.FullName sign /f $pfx /p $env:SIGNING_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 `
             "artifacts\VoiceFlowWin-Setup-x64-${{ steps.version.outputs.version }}.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           Remove-Item $pfx -Force
           "signed=true" >> $env:GITHUB_OUTPUT
+
+      - name: Проверка цифровых подписей
+        if: ${{ env.SIGNING_CERTIFICATE != '' }}
+        shell: pwsh
+        run: |
+          @(
+            'publish\VoiceFlowWin.exe',
+            'publish\VoiceFlowWin.UpdaterHost.exe',
+            'artifacts\VoiceFlowWin-Setup-x64-${{ steps.version.outputs.version }}.exe'
+          ) | ForEach-Object {
+            $signature = Get-AuthenticodeSignature $_
+            if ($signature.Status -ne 'Valid') {
+              Write-Error "Подпись $_ не прошла проверку: $($signature.Status)."
+              exit 1
+            }
+          }
 
       - name: Контрольные суммы
         id: checksums

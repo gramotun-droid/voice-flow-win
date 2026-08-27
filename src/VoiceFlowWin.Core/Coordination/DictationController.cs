@@ -2,6 +2,7 @@ using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using VoiceFlowWin.Core.Abstractions;
+using VoiceFlowWin.Core.History;
 using VoiceFlowWin.Core.Models;
 using VoiceFlowWin.Core.Settings;
 
@@ -54,6 +55,7 @@ public sealed class DictationController : IAsyncDisposable
     private readonly IFocusTracker _focusTracker;
     private readonly IInputInterventionMonitor _intervention;
     private readonly ISettingsService _settings;
+    private readonly IDictationHistoryStore _history;
     private readonly ILogger<DictationController> _logger;
 
     private readonly Channel<Func<CancellationToken, Task>> _work =
@@ -78,6 +80,7 @@ public sealed class DictationController : IAsyncDisposable
 
     /// <summary>Окно, в котором началась текущая диктовка.</summary>
     private WindowFocusSnapshot _sessionFocus = WindowFocusSnapshot.Unknown;
+    private DateTimeOffset _sessionStartedAt;
     private bool _disposed;
 
     public DictationController(
@@ -91,6 +94,7 @@ public sealed class DictationController : IAsyncDisposable
         IFocusTracker focusTracker,
         IInputInterventionMonitor intervention,
         ISettingsService settings,
+        IDictationHistoryStore history,
         ILogger<DictationController>? logger = null)
     {
         _capture = capture;
@@ -103,6 +107,7 @@ public sealed class DictationController : IAsyncDisposable
         _focusTracker = focusTracker;
         _intervention = intervention;
         _settings = settings;
+        _history = history;
         _logger = logger ?? NullLogger<DictationController>.Instance;
 
         _capture.FrameCaptured += OnFrameCaptured;
@@ -217,6 +222,7 @@ public sealed class DictationController : IAsyncDisposable
         {
             var focus = CaptureTargetFocus();
             _sessionFocus = focus;
+            _sessionStartedAt = DateTimeOffset.UtcNow;
             var language = ResolveLanguage(focus);
             await _streaming.PrepareAsync(language, cancellationToken).ConfigureAwait(false);
 
@@ -273,7 +279,9 @@ public sealed class DictationController : IAsyncDisposable
         await Task.Yield();
 
         await WaitForPendingResultsAsync(cancellationToken).ConfigureAwait(false);
-        await RunFullPassAsync(cancellationToken).ConfigureAwait(false);
+        var sessionAudio = _coordinator.BuildSessionAudio();
+        await RunFullPassAsync(sessionAudio, cancellationToken).ConfigureAwait(false);
+        await SaveHistoryAsync(sessionAudio, cancellationToken).ConfigureAwait(false);
 
         _coordinator.EndSession();
         SetState(DictationState.Idle);
@@ -286,7 +294,7 @@ public sealed class DictationController : IAsyncDisposable
     /// вместе — отсюда общая пунктуация и формы слов. Любая ошибка прохода
     /// оставляет пофразный результат нетронутым: он уже в поле.
     /// </remarks>
-    private async Task RunFullPassAsync(CancellationToken cancellationToken)
+    private async Task RunFullPassAsync(byte[] audio, CancellationToken cancellationToken)
     {
         if (!_settings.Current.Whisper.FullPassAfterStop)
         {
@@ -294,7 +302,6 @@ public sealed class DictationController : IAsyncDisposable
             return;
         }
 
-        var audio = _coordinator.BuildSessionAudio();
         var injected = _coordinator.SessionInjectedText;
         if (audio.Length == 0 || injected.Length == 0)
         {
@@ -340,9 +347,9 @@ public sealed class DictationController : IAsyncDisposable
             }
 
             _logger.LogInformation(
-                "Проход по всей диктовке распознал за {Elapsed}: «{Text}»",
+                "Проход по всей диктовке распознал за {Elapsed}: {TextLength} символов.",
                 DateTimeOffset.UtcNow - started,
-                result.Text);
+                result.Text.Length);
 
             var applied = await _coordinator.ApplySessionCorrectionAsync(result.Text, timeout.Token).ConfigureAwait(false);
             _logger.LogInformation(
@@ -364,6 +371,38 @@ public sealed class DictationController : IAsyncDisposable
         finally
         {
             FullPassRunningChanged?.Invoke(this, false);
+        }
+    }
+
+    private async Task SaveHistoryAsync(byte[] audio, CancellationToken cancellationToken)
+    {
+        var text = _coordinator.SessionInjectedText;
+        if (text.Length == 0 && audio.Length == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await _history.SaveSessionAsync(
+                new DictationSessionSnapshot(
+                    _sessionStartedAt,
+                    DateTimeOffset.UtcNow,
+                    ResolveLanguage(_sessionFocus),
+                    text,
+                    audio),
+                _settings.Current.Privacy,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // История — опциональная функция: ошибка диска не должна оставлять
+            // диктовку в состоянии Finalizing после успешной вставки текста.
+            _logger.LogWarning(ex, "Сеанс диктовки не удалось сохранить в локальную историю.");
         }
     }
 
@@ -436,15 +475,15 @@ public sealed class DictationController : IAsyncDisposable
             return;
         }
 
-        var voskFinal = _streaming.FlushFinalResult();
+        var streamingFinal = _streaming.FlushFinalResult();
         _logger.LogInformation(
-            "Фраза {SegmentId} закрыта ({Reason}): потоковая модель услышала «{Text}», звука {Seconds:0.0} с.",
+            "Фраза {SegmentId} закрыта ({Reason}): потоковый результат {TextLength} символов, звука {Seconds:0.0} с.",
             segmentId,
             e.Reason,
-            voskFinal,
+            streamingFinal.Length,
             e.Pcm.Length / (double)(AudioFormat.SampleRate * AudioFormat.BytesPerSample));
 
-        await _coordinator.EndSegmentAsync(segmentId, voskFinal, e.Pcm, token).ConfigureAwait(false);
+        await _coordinator.EndSegmentAsync(segmentId, streamingFinal, e.Pcm, token).ConfigureAwait(false);
 
         var segment = _coordinator.FindSegment(segmentId);
         if (segment is not null && e.Pcm.Length > 0)
@@ -457,10 +496,10 @@ public sealed class DictationController : IAsyncDisposable
             var accepted = _finalQueue.Enqueue(new FinalRecognitionRequest(segmentId, e.Pcm, language, context));
 
             _logger.LogInformation(
-                "Фраза {SegmentId} отправлена в Whisper: язык {Language}, контекст «{Context}», принята: {Accepted}, в очереди {Pending}.",
+                "Фраза {SegmentId} отправлена в Whisper: язык {Language}, контекст {ContextLength} символов, принята: {Accepted}, в очереди {Pending}.",
                 segmentId,
                 language,
-                context ?? string.Empty,
+                context?.Length ?? 0,
                 accepted,
                 _finalQueue.PendingCount);
         }
@@ -477,11 +516,11 @@ public sealed class DictationController : IAsyncDisposable
     private void OnFinalResultReady(object? sender, FinalRecognitionResult result) => Post(async token =>
     {
         _logger.LogInformation(
-            "Whisper вернул для фразы {SegmentId} за {Duration}: успех {Succeeded}, текст «{Text}»{Error}",
+            "Whisper вернул для фразы {SegmentId} за {Duration}: успех {Succeeded}, текст {TextLength} символов{Error}",
             result.SegmentId,
             result.Duration,
             result.Succeeded,
-            result.Text,
+            result.Text.Length,
             result.Error is null ? string.Empty : ", ошибка: " + result.Error);
 
         await _coordinator.ApplyFinalRecognitionAsync(result, token).ConfigureAwait(false);

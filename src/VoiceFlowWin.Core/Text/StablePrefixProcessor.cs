@@ -2,7 +2,7 @@ using System.Text;
 
 namespace VoiceFlowWin.Core.Text;
 
-/// <summary>Настройки стабилизации потоковых гипотез Vosk.</summary>
+/// <summary>Настройки стабилизации потоковых гипотез распознавателя.</summary>
 public sealed class StablePrefixOptions
 {
     /// <summary>Сколько подряд идущих гипотез должны содержать слово, чтобы считать его стабильным.</summary>
@@ -48,7 +48,7 @@ public readonly record struct StablePrefixUpdate(string StableText, string Volat
 }
 
 /// <summary>
-/// Превращает поток переписывающих друг друга гипотез Vosk в монотонно
+/// Превращает поток переписывающих друг друга гипотез в монотонно
 /// растущий текст, который можно безопасно вводить в чужое приложение.
 /// </summary>
 /// <remarks>
@@ -113,7 +113,7 @@ public sealed class StablePrefixProcessor
 
         var stableCandidate = CountStableLeadingTokens(tokens, now);
 
-        // Префикс монотонен: если Vosk сократил гипотезу, ранее подтверждённые
+        // Префикс монотонен: если движок сократил гипотезу, ранее подтверждённые
         // слова остаются — их уже видит пользователь, а исправит их Whisper.
         var target = Math.Max(_committed.Count, stableCandidate);
         var newlyCommitted = new List<string>();
@@ -131,7 +131,7 @@ public sealed class StablePrefixProcessor
     }
 
     /// <summary>
-    /// Завершает сегмент: финальный результат Vosk подтверждается целиком,
+    /// Завершает сегмент: финальный потоковый результат подтверждается целиком,
     /// изменяемого хвоста больше нет.
     /// </summary>
     public StablePrefixUpdate Finalize(string? finalText, DateTimeOffset now)

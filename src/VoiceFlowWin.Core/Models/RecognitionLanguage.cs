@@ -6,7 +6,7 @@ public enum RecognitionLanguage
     Russian,
     English,
 
-    /// <summary>Язык определяет сам Whisper; Vosk в этом режиме использует язык раскладки.</summary>
+    /// <summary>Язык определяет сам Whisper; потоковая модель использует язык раскладки.</summary>
     Auto,
 }
 
@@ -22,7 +22,7 @@ public enum LanguageSelectionMode
 
 public static class RecognitionLanguageExtensions
 {
-    /// <summary>Код языка в формате, который понимают Vosk-модели и whisper.cpp.</summary>
+    /// <summary>Код языка в формате, который понимают движки распознавания.</summary>
     public static string ToCode(this RecognitionLanguage language) => language switch
     {
         RecognitionLanguage.Russian => "ru",

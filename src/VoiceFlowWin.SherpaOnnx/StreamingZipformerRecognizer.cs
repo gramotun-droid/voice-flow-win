@@ -60,8 +60,6 @@ public sealed class StreamingZipformerRecognizer : IStreamingRecognizer
 
     public event EventHandler<PartialResultEventArgs>? PartialResult;
 
-    public event EventHandler<PartialResultEventArgs>? FinalResult;
-
     public async Task PrepareAsync(RecognitionLanguage language, CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -171,7 +169,7 @@ public sealed class StreamingZipformerRecognizer : IStreamingRecognizer
         }
 
         _lastPartial = partial;
-        _logger.LogDebug("Гипотеза: «{Text}»", partial);
+        _logger.LogDebug("Промежуточная гипотеза: {TextLength} символов.", partial.Length);
         PartialResult?.Invoke(this, new PartialResultEventArgs(partial));
     }
 
@@ -195,7 +193,7 @@ public sealed class StreamingZipformerRecognizer : IStreamingRecognizer
                 }
 
                 var text = _recognizer.GetResult(_stream).Text.Trim();
-                _logger.LogInformation("Потоковая модель завершила фразу: «{Text}»", text);
+                _logger.LogInformation("Потоковая модель завершила фразу: {TextLength} символов.", text.Length);
 
                 _stream.Dispose();
                 _stream = _recognizer.CreateStream();

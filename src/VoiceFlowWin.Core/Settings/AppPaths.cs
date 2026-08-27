@@ -34,6 +34,8 @@ public sealed class AppPaths
 
     public string HistoryFile => Path.Combine(Root, "history.json");
 
+    public string HistoryAudioDirectory => Path.Combine(Root, "HistoryAudio");
+
     public void EnsureCreated()
     {
         Directory.CreateDirectory(Root);

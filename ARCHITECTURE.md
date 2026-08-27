@@ -22,7 +22,8 @@ Windows, живёт в кроссплатформенных проектах**. 
 интерфейсы `IAudioCaptureService`, `IStreamingRecognizer`, `IFinalRecognizer`,
 `ISpeechSegmenter`, `IFinalRecognitionQueue`, `ITextInjectionService`,
 `IFocusTracker`, `IInputInterventionMonitor`, `IGlobalHotkeyService`,
-`IEscapeStopService`. Реализации подставляются контейнером в `App.xaml.cs`.
+`IEscapeStopService`, `IDictationHistoryStore`. Реализации подставляются
+контейнером в `App.xaml.cs`.
 
 ## Поток данных
 
@@ -141,10 +142,10 @@ Runtime: минус сотни мегабайт зависимостей и за
 
 ### Выпуск собирается только на Windows
 
-Пакеты `Zipformer` и `Whisper.net.Runtime` выбирают native-библиотеки по
-операционной системе сборки, а не по целевому RID: `Zipformer.targets` явно
-проверяет `IsOsPlatform(Windows)`. Кросс-сборка на Linux даёт рабочие
-managed-сборки, но кладёт рядом `libvosk.so` вместо `libvosk.dll`. Поэтому
+Пакет `Whisper.net.Runtime` выбирает native-библиотеки по операционной системе
+сборки, а не только по целевому RID. sherpa-onnx подключает отдельные runtime-
+пакеты по RID и этой проблемы не имеет. Кросс-публикация на Linux всё равно
+может положить рядом Linux runtime Whisper вместо Windows DLL. Поэтому
 `dotnet publish` и сборка установщика в CI выполняются на `windows-latest`, а
 Linux-агент используется только для быстрых тестов.
 
@@ -169,6 +170,8 @@ dictionary.json    пользовательский словарь
 Models\            скачанные модели Zipformer и Whisper
 Updates\           проверенные пакеты обновлений
 Logs\              технический лог без содержимого диктовки
+history.json       метаданные истории, только если она включена
+HistoryAudio\      WAV-записи сеансов, только при отдельном согласии
 ```
 
 Установщик и обновление этот каталог не трогают, поэтому настройки, словарь и

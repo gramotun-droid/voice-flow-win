@@ -3,7 +3,7 @@ using VoiceFlowWin.Core.Text;
 namespace VoiceFlowWin.Core.Models;
 
 /// <summary>
-/// Всё, что известно об одном речевом сегменте: исходное аудио, гипотезы Vosk,
+/// Всё, что известно об одном речевом сегменте: исходное аудио, потоковые гипотезы,
 /// реально вставленный в чужое приложение текст и результат Whisper.
 /// </summary>
 /// <remarks>
@@ -38,13 +38,13 @@ public sealed class DictationSegment
 
     public SegmentState State { get; private set; }
 
-    /// <summary>Исходный PCM 16 kHz mono 16 bit, который получают и Vosk, и Whisper.</summary>
+    /// <summary>Исходный PCM 16 kHz mono 16 bit, который получают и Zipformer, и Whisper.</summary>
     public byte[] Audio { get; private set; } = Array.Empty<byte>();
 
-    /// <summary>Последняя промежуточная гипотеза Vosk целиком.</summary>
+    /// <summary>Последняя промежуточная гипотеза целиком.</summary>
     public string PartialText { get; private set; } = string.Empty;
 
-    /// <summary>Стабильная часть гипотезы Vosk — то, что разрешено вводить.</summary>
+    /// <summary>Стабильная часть потоковой гипотезы — то, что разрешено вводить.</summary>
     public string StableText { get; private set; } = string.Empty;
 
     /// <summary>Изменяемый хвост: показывается в overlay, в поле попадает только в «живом» режиме.</summary>

@@ -21,9 +21,6 @@ public interface IStreamingRecognizer : IDisposable
 
     event EventHandler<PartialResultEventArgs>? PartialResult;
 
-    /// <summary>Распознаватель сам решил, что фраза закончилась, и отдал финальный текст.</summary>
-    event EventHandler<PartialResultEventArgs>? FinalResult;
-
     /// <summary>Загружает модель нужного языка. Между сегментами вызывается заново только при смене языка.</summary>
     Task PrepareAsync(RecognitionLanguage language, CancellationToken cancellationToken);
 

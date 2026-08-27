@@ -13,6 +13,7 @@ using VoiceFlowWin.Core.Abstractions;
 using VoiceFlowWin.Core.Commands;
 using VoiceFlowWin.Core.Coordination;
 using VoiceFlowWin.Core.Dictionary;
+using VoiceFlowWin.Core.History;
 using VoiceFlowWin.Core.Models;
 using VoiceFlowWin.Core.Settings;
 using VoiceFlowWin.Updater;
@@ -218,8 +219,9 @@ public partial class App : Application
 
         services.AddLogging(builder =>
         {
-            // Debug включён намеренно: без промежуточных гипотез по логу
-            // нельзя понять, что приложение услышало и где потеряло текст.
+            // Диагностические события доступны отладчику, но файловый provider
+            // принимает только Information и выше. Даже на этих уровнях код
+            // пишет лишь длины текста, а не содержимое диктовки.
             builder.SetMinimumLevel(LogLevel.Debug);
             // Технический лог не содержит содержимого диктовки: в него пишутся
             // только состояния и ошибки.
@@ -228,6 +230,7 @@ public partial class App : Application
 
         services.AddSingleton(paths);
         services.AddSingleton<ISettingsService, SettingsService>();
+        services.AddSingleton<IDictationHistoryStore, DictationHistoryStore>();
         services.AddSingleton<IDictionaryStore, DictionaryStore>();
         services.AddSingleton<DictionaryProcessor>();
         services.AddSingleton<VoiceCommandProcessor>();

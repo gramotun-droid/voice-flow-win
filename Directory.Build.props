@@ -9,7 +9,8 @@
     установщик, portable-архив и update-manifest.json получают ту же строку.
   -->
   <PropertyGroup>
-    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionPrefix>0.3.0</VersionPrefix>
+    <VersionSuffix>beta.1</VersionSuffix>
     <Product>VoiceFlowWin</Product>
     <Company>gramotun</Company>
     <Authors>gramotun</Authors>

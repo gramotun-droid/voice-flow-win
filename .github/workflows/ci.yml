@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  schedule:
+    # Настоящие модели скачиваются раз в неделю: обычный PR остаётся быстрым,
+    # но ссылки, контрольные суммы, распаковка и native runtime не протухают молча.
+    - cron: "17 3 * * 3"
 
 # Минимальные права: workflow только читает репозиторий.
 permissions:
@@ -124,3 +128,38 @@ jobs:
           name: test-results-windows
           path: TestResults
           if-no-files-found: warn
+
+  model-integration:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      VOICEFLOWWIN_RUN_MODEL_TESTS: "1"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-dotnet@87b7050bc53ea08284295505d98d2aa94301e852 # v4.2.0
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore VoiceFlowWin.sln
+
+      - name: Сборка интеграционных тестов
+        run: dotnet build tests/VoiceFlowWin.Tests/VoiceFlowWin.Tests.csproj --configuration Release --no-restore
+
+      - name: Проверка загрузки и распознавания настоящими моделями
+        run: >
+          dotnet test tests/VoiceFlowWin.Tests/VoiceFlowWin.Tests.csproj
+          --configuration Release --no-build
+          --filter "FullyQualifiedName~ZipformerRecognitionTests|FullyQualifiedName~ModelDownloadIntegrationTests"
+          --logger "trx;LogFileName=model-integration.trx"
+          --results-directory TestResults
+
+      - name: Публикация результатов
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: test-results-model-integration
+          path: TestResults
+          if-no-files-found: error

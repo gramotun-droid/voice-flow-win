@@ -39,6 +39,8 @@ Whisper и аккуратно исправляется.
   копирования.
 - Менеджер моделей: загрузка, проверка, безопасная распаковка.
 - Автоматические обновления: проверка при запуске и раз в несколько часов.
+- Опциональная локальная история: отдельно включаются текст и WAV-запись,
+  действует автоматический срок хранения и полная очистка из настроек.
 
 ## Установка
 
@@ -119,6 +121,10 @@ dotnet build VoiceFlowWin.sln --configuration Release
 # Кроссплатформенные тесты (проходят и на Linux, и на Windows)
 dotnet test tests/VoiceFlowWin.Tests/VoiceFlowWin.Tests.csproj
 
+# Настоящие модели: скачивает около 150 МБ, проверяет источник и распознавание
+VOICEFLOWWIN_RUN_MODEL_TESTS=1 dotnet test tests/VoiceFlowWin.Tests/VoiceFlowWin.Tests.csproj \
+  --filter "ZipformerRecognitionTests|ModelDownloadIntegrationTests"
+
 # Тесты Win32-слоя — только на Windows
 dotnet test tests/VoiceFlowWin.Windows.Tests/VoiceFlowWin.Windows.Tests.csproj
 ```
@@ -134,7 +140,7 @@ sherpa-onnx этой проблемы лишён — его native-пакет в
 ```powershell
 dotnet publish src/VoiceFlowWin.App/VoiceFlowWin.App.csproj -c Release -r win-x64 --self-contained false -o publish
 dotnet publish src/VoiceFlowWin.UpdaterHost/VoiceFlowWin.UpdaterHost.csproj -c Release -r win-x64 --self-contained false -o publish
-& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DMyAppVersion=0.1.0 installer\voiceflowwin.iss
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DMyAppVersion=0.3.0-beta.1 installer\voiceflowwin.iss
 ```
 
 Версия задаётся в одном месте — `Directory.Build.props`; при выпуске её
@@ -145,8 +151,8 @@ dotnet publish src/VoiceFlowWin.UpdaterHost/VoiceFlowWin.UpdaterHost.csproj -c R
 Выпуск создаётся пушем тега:
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v0.3.0-beta.1
+git push origin v0.3.0-beta.1
 ```
 
 Workflow соберёт приложение, прогонит тесты, создаст установщик, portable-архив,
@@ -160,9 +166,13 @@ Workflow соберёт приложение, прогонит тесты, со�
 - [COMPATIBILITY.md](COMPATIBILITY.md) — матрица совместимости с приложениями.
 - [LIMITATIONS.md](LIMITATIONS.md) — известные ограничения.
 - [CHANGELOG.md](CHANGELOG.md) — история изменений.
+- [docs/WINDOWS_VALIDATION.md](docs/WINDOWS_VALIDATION.md) — приёмка на Windows и тестовые фразы.
+- [docs/PERFORMANCE.md](docs/PERFORMANCE.md) — методика и сбор показателей.
 
 ## Лицензии сторонних компонентов
 
 sherpa-onnx (Apache-2.0), Whisper.net и whisper.cpp (MIT), NAudio (MIT),
 Microsoft.Extensions.\* (MIT). Полный список — в `THIRD-PARTY-LICENSES.txt`
 из состава релиза.
+
+Исходный код VoiceFlowWin распространяется по лицензии [MIT](LICENSE).

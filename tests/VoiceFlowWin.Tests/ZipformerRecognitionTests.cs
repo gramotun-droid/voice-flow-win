@@ -31,7 +31,7 @@ public sealed class ZipformerRecognitionTests : IDisposable
         }
     }
 
-    [Fact(Skip = "Требует сети и качает ~24 МБ; запускать вручную.")]
+    [ModelIntegrationFact]
     public async Task Русская_речь_распознаётся_потоково()
     {
         var model = ModelCatalog.Find("sherpa-onnx-streaming-zipformer-small-ru-vosk-int8-2025-08-16")!;

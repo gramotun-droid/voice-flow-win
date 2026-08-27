@@ -3,10 +3,10 @@ namespace VoiceFlowWin.Core.Models;
 /// <summary>Жизненный цикл одного речевого сегмента.</summary>
 public enum SegmentState
 {
-    /// <summary>Идёт запись звука, Vosk ещё не выдал ни одной гипотезы.</summary>
+    /// <summary>Идёт запись звука, потоковая модель ещё не выдала гипотезу.</summary>
     Recording,
 
-    /// <summary>Vosk выдаёт промежуточные результаты, стабильный префикс вводится в поле.</summary>
+    /// <summary>Потоковая модель выдаёт результаты, стабильный префикс вводится в поле.</summary>
     Streaming,
 
     /// <summary>Речь закончилась, аудио собрано, сегмент ждёт очереди Whisper.</summary>

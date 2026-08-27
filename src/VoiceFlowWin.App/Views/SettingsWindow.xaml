@@ -280,9 +280,11 @@
                                Text="Распознавание выполняется полностью локально. Аудио и текст не покидают компьютер, телеметрии нет." />
 
                     <TextBlock Text="Хранение данных" Style="{StaticResource SectionHeader}" />
-                    <CheckBox Content="Сохранять аудио сегментов" IsChecked="{Binding Draft.Privacy.StoreAudio}" />
-                    <CheckBox Content="Сохранять распознанный текст" IsChecked="{Binding Draft.Privacy.StoreRecognizedText}" />
                     <CheckBox Content="Вести историю диктовок" IsChecked="{Binding Draft.Privacy.KeepHistory}" />
+                    <CheckBox Content="Включать распознанный текст в историю" Margin="20,0,0,0"
+                              IsChecked="{Binding Draft.Privacy.StoreRecognizedText}" />
+                    <CheckBox Content="Сохранять WAV-запись сеанса в истории" Margin="20,0,0,0"
+                              IsChecked="{Binding Draft.Privacy.StoreAudio}" />
 
                     <TextBlock Text="Срок хранения истории, дней" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
                     <TextBox Text="{Binding Draft.Privacy.HistoryRetentionDays}" Width="120" HorizontalAlignment="Left" />

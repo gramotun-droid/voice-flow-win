@@ -109,6 +109,27 @@ public sealed class SettingsMigrationTests : IDisposable
     }
 
     [Fact]
+    public void Прежняя_пауза_по_умолчанию_переносится_на_пять_секунд()
+    {
+        WriteSettings("""{ "schemaVersion": 4, "segmentation": { "silenceToEndSegmentMs": 800 } }""");
+
+        var settings = new SettingsService(_paths).Load();
+
+        Assert.Equal(5000, settings.Segmentation.SilenceToEndSegmentMs);
+        Assert.Equal(SettingsService.CurrentSchemaVersion, settings.SchemaVersion);
+    }
+
+    [Fact]
+    public void Выбранная_пользователем_пауза_не_меняется()
+    {
+        WriteSettings("""{ "schemaVersion": 4, "segmentation": { "silenceToEndSegmentMs": 2500 } }""");
+
+        var settings = new SettingsService(_paths).Load();
+
+        Assert.Equal(2500, settings.Segmentation.SilenceToEndSegmentMs);
+    }
+
+    [Fact]
     public void Новая_установка_сразу_на_текущей_схеме()
     {
         var settings = new SettingsService(_paths).Load();

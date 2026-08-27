@@ -60,7 +60,7 @@ public sealed class SettingsService : ISettingsService
     public event EventHandler<AppSettings>? SettingsChanged;
 
     /// <summary>Текущая версия схемы настроек.</summary>
-    public const int CurrentSchemaVersion = 4;
+    public const int CurrentSchemaVersion = 5;
 
     public AppSettings Load()
     {
@@ -148,6 +148,15 @@ public sealed class SettingsService : ISettingsService
             settings.Streaming.RussianModelPath = string.Empty;
             settings.Streaming.EnglishModelPath = string.Empty;
             _logger.LogInformation("Пути потоковых моделей очищены: движок распознавания сменился.");
+        }
+
+        // В пятой версии фрагмент закрывается после пяти секунд тишины. Меняем
+        // только прежнее значение по умолчанию: явно выбранную пользователем
+        // длительность миграция не должна перезаписывать.
+        if (settings.SchemaVersion < 5 && settings.Segmentation.SilenceToEndSegmentMs == 800)
+        {
+            settings.Segmentation.SilenceToEndSegmentMs = 5000;
+            _logger.LogInformation("Пауза завершения фрагмента перенесена на 5000 мс.");
         }
 
         settings.SchemaVersion = CurrentSchemaVersion;

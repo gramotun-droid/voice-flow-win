@@ -199,7 +199,8 @@ public sealed class SegmentationSettings
 
     public int MinSpeechMs { get; set; } = 200;
 
-    public int SilenceToEndSegmentMs { get; set; } = 800;
+    /// <summary>Пять секунд тишины закрывают текущий фрагмент, но не сеанс диктовки.</summary>
+    public int SilenceToEndSegmentMs { get; set; } = 5000;
 
     public int PreRollMs { get; set; } = 300;
 

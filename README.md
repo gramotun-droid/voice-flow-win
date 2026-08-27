@@ -140,7 +140,7 @@ sherpa-onnx этой проблемы лишён — его native-пакет в
 ```powershell
 dotnet publish src/VoiceFlowWin.App/VoiceFlowWin.App.csproj -c Release -r win-x64 --self-contained false -o publish
 dotnet publish src/VoiceFlowWin.UpdaterHost/VoiceFlowWin.UpdaterHost.csproj -c Release -r win-x64 --self-contained false -o publish
-& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DMyAppVersion=0.3.0-beta.1 installer\voiceflowwin.iss
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DMyAppVersion=0.3.0-beta.2 installer\voiceflowwin.iss
 ```
 
 Версия задаётся в одном месте — `Directory.Build.props`; при выпуске её
@@ -151,8 +151,8 @@ dotnet publish src/VoiceFlowWin.UpdaterHost/VoiceFlowWin.UpdaterHost.csproj -c R
 Выпуск создаётся пушем тега:
 
 ```bash
-git tag v0.3.0-beta.1
-git push origin v0.3.0-beta.1
+git tag v0.3.0-beta.2
+git push origin v0.3.0-beta.2
 ```
 
 Workflow соберёт приложение, прогонит тесты, создаст установщик, portable-архив,

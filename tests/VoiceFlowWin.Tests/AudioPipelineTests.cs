@@ -121,6 +121,28 @@ public class AudioPipelineTests
     }
 
     [Fact]
+    public void Пауза_короче_пяти_секунд_не_закрывает_фрагмент()
+    {
+        var settings = new SegmentationSettings { MinSpeechMs = 100 };
+        var segmenter = new SpeechSegmenter(new EnergyVoiceActivityDetector(0.5), settings);
+
+        var completed = 0;
+        segmenter.SegmentCompleted += (_, _) => completed++;
+
+        segmenter.Push(Silence(300));
+        segmenter.Push(Tone(600));
+        segmenter.Push(Silence(4900));
+
+        Assert.Equal(0, completed);
+        Assert.True(segmenter.IsInSpeech);
+
+        segmenter.Push(Silence(200));
+
+        Assert.Equal(1, completed);
+        Assert.False(segmenter.IsInSpeech);
+    }
+
+    [Fact]
     public void Сегментатор_отбрасывает_слишком_короткий_всплеск()
     {
         var settings = new SegmentationSettings { SilenceToEndSegmentMs = 200, MinSpeechMs = 400 };

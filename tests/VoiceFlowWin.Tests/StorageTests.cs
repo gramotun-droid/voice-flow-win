@@ -73,7 +73,7 @@ public sealed class StorageTests : IDisposable
         Assert.False(settings.Privacy.KeepHistory);
 
         // Пауза завершения фразы и максимальная длительность из ТЗ.
-        Assert.InRange(settings.Segmentation.SilenceToEndSegmentMs, 700, 900);
+        Assert.Equal(5000, settings.Segmentation.SilenceToEndSegmentMs);
         Assert.InRange(settings.Segmentation.MaxSegmentSeconds, 20, 30);
         Assert.Equal(4, settings.Updates.CheckIntervalHours);
     }

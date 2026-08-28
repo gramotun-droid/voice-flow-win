@@ -27,7 +27,7 @@
 README и проверьте его тем же способом:
 
 ```powershell
-.\scripts\windows-smoke.ps1 -InstallerPath .\installer_output\VoiceFlowWin-Setup-x64-0.3.0-beta.2.exe
+.\scripts\windows-smoke.ps1 -InstallerPath .\installer_output\VoiceFlowWin-Setup-x64-0.3.0-beta.3.exe
 ```
 
 ## 2. Окружение отчёта

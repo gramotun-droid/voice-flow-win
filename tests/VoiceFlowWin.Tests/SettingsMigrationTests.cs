@@ -122,7 +122,7 @@ public sealed class SettingsMigrationTests : IDisposable
     [Fact]
     public void Любая_пауза_прежней_схемы_переносится_на_пять_секунд()
     {
-        WriteSettings("""{ "schemaVersion": 4, "segmentation": { "silenceToEndSegmentMs": 2500 } }""");
+        WriteSettings("""{ "schemaVersion": 5, "segmentation": { "silenceToEndSegmentMs": 2500 } }""");
 
         var settings = new SettingsService(_paths).Load();
 

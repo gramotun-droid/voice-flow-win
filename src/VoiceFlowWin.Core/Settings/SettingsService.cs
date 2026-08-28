@@ -60,7 +60,7 @@ public sealed class SettingsService : ISettingsService
     public event EventHandler<AppSettings>? SettingsChanged;
 
     /// <summary>Текущая версия схемы настроек.</summary>
-    public const int CurrentSchemaVersion = 5;
+    public const int CurrentSchemaVersion = 6;
 
     public AppSettings Load()
     {
@@ -150,10 +150,11 @@ public sealed class SettingsService : ISettingsService
             _logger.LogInformation("Пути потоковых моделей очищены: движок распознавания сменился.");
         }
 
-        // В пятой версии зафиксировано новое правило: фрагмент закрывается
+        // В шестой версии зафиксировано новое правило: фрагмент закрывается
         // после пяти секунд тишины. Старые установки могли хранить любое
-        // значение, поэтому при переходе на новую схему задаём его однократно.
-        if (settings.SchemaVersion < 5)
+        // значение, включая уже сохранённое промежуточной beta-версией,
+        // поэтому при переходе на новую схему задаём его однократно.
+        if (settings.SchemaVersion < 6)
         {
             settings.Segmentation.SilenceToEndSegmentMs = 5000;
             _logger.LogInformation("Пауза завершения фрагмента перенесена на 5000 мс.");

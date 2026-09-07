@@ -76,7 +76,6 @@ public sealed class TrayIconHost : IDisposable
             DictationState.Preparing => "Подготовка…",
             DictationState.Listening => "Слушаю",
             DictationState.Speaking => "Распознаю речь",
-            DictationState.Finalizing => "Финализация",
             DictationState.Error => "Ошибка: " + (e.Message ?? "неизвестная"),
             _ => "Ожидание",
         };

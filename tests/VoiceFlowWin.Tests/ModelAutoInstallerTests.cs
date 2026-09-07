@@ -61,7 +61,7 @@ public sealed class ModelAutoInstallerTests : IDisposable
         var settings = new SettingsService(_paths).Load();
         Assert.NotEqual(string.Empty, settings.Streaming.RussianModelPath);
         Assert.NotEqual(string.Empty, settings.Streaming.EnglishModelPath);
-        Assert.NotEqual(string.Empty, settings.Whisper.ModelPath);
+        Assert.Equal(string.Empty, settings.Whisper.ModelPath);
     }
 
     [Fact]

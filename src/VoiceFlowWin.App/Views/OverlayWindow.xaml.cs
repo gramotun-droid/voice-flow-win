@@ -45,17 +45,6 @@ public partial class OverlayWindow : Window
             SyncVisibility();
         });
 
-        // Замороженный результат Whisper появляется уже после остановки
-        // диктовки — окно должно дожить до того, как пользователь его применит
-        // или скопирует.
-        _viewModel.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName is nameof(OverlayViewModel.HasBlockedResult))
-            {
-                Dispatcher.BeginInvoke(SyncVisibility);
-            }
-        };
-
         _settings.SettingsChanged += (_, _) => Dispatcher.BeginInvoke(SyncVisibility);
     }
 
@@ -64,13 +53,12 @@ public partial class OverlayWindow : Window
     /// </summary>
     /// <remarks>
     /// Постоянно висящее поверх всех окон окно мешает работе, поэтому overlay
-    /// живёт ровно столько, сколько идёт диктовка: плюс незакрытая ошибка и
-    /// замороженный результат, который иначе некуда было бы применить.
+    /// живёт ровно столько, сколько идёт диктовка.
     /// </remarks>
     public void SyncVisibility()
     {
         var wanted = _settings.Current.Overlay.Visible
-            && (_controller.State != DictationState.Idle || _viewModel.HasBlockedResult);
+            && _controller.State != DictationState.Idle;
 
         if (wanted && !IsVisible)
         {
@@ -136,7 +124,6 @@ public partial class OverlayWindow : Window
         {
             DictationState.Listening => new SolidColorBrush(Color.FromRgb(0x22, 0xC5, 0x5E)),
             DictationState.Speaking => new SolidColorBrush(Color.FromRgb(0x25, 0x63, 0xEB)),
-            DictationState.Finalizing => new SolidColorBrush(Color.FromRgb(0xF5, 0x9E, 0x0B)),
             DictationState.Error => new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44)),
             _ => new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B)),
         };

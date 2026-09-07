@@ -158,27 +158,18 @@ public sealed class HybridTranscriptionCoordinator
         }
 
         var update = context.Prefix.Process(hypothesis, now);
-        context.Segment.RecordHypothesis(update.FullText, update.StableText, update.VolatileTail);
 
-        var liveTextMode = _settings.Current.General.LiveTextMode;
-
-        // Во время речи поле не трогается вовсе: фраза попадёт в него один раз
-        // и уже проверенной. Пользователь видит распознанное в overlay.
-        if (liveTextMode != LiveTextMode.InsertAfterPause)
-        {
-            var visibleText = liveTextMode == LiveTextMode.MaximumLive
-                ? update.FullText
-                : update.StableText;
-
-            await SyncInjectionAsync(context, PrepareInterimText(context, visibleText), cancellationToken).ConfigureAwait(false);
-        }
+        // Потоковая гипотеза теперь является единственным результатом распознавания.
+        // Поэтому весь услышанный текст сразу показывается обычным цветом и
+        // синхронизируется с полем — «серого», но не напечатанного хвоста нет.
+        context.Segment.RecordHypothesis(update.FullText, update.FullText, string.Empty);
+        await SyncInjectionAsync(context, PrepareInterimText(context, update.FullText), cancellationToken).ConfigureAwait(false);
 
         SegmentUpdated?.Invoke(this, new SegmentEventArgs(context.Segment));
     }
 
     /// <summary>
-    /// Закрывает сегмент: финальный текст потоковой модели дописывается целиком, включая
-    /// изменяемый хвост, который в безопасном режиме был только в overlay.
+    /// Закрывает сегмент последним результатом потоковой модели.
     /// </summary>
     public async Task EndSegmentAsync(long segmentId, string? streamingFinalText, byte[] audio, CancellationToken cancellationToken)
     {
@@ -187,20 +178,19 @@ public sealed class HybridTranscriptionCoordinator
             return;
         }
 
-        var update = context.Prefix.Finalize(streamingFinalText, DateTimeOffset.UtcNow);
-        context.Segment.RecordHypothesis(update.StableText, update.StableText, string.Empty);
+        // FlushFinalResult может вернуть пустую строку, если движок уже отдал
+        // всё промежуточными результатами. В таком случае сохраняем последнюю
+        // видимую гипотезу, а не очищаем поле.
+        var previousText = context.Prefix.CurrentHypothesis;
+        var currentText = SelectCompletedStreamingText(previousText, streamingFinalText);
+
+        context.Prefix.Process(currentText, DateTimeOffset.UtcNow);
+        context.Segment.RecordHypothesis(currentText, currentText, string.Empty);
         context.Segment.SetAudio(audio);
         RememberSessionAudio(audio);
 
-        // В режиме вставки после паузы текст потоковой модели в поле не попадает: его
-        // задача — показать речь в overlay, а в поле уйдёт результат Whisper.
-        // Если Whisper не справится, текст потоковой модели вставит обработчик отказа.
-        if (_settings.Current.General.LiveTextMode != LiveTextMode.InsertAfterPause)
-        {
-            await SyncInjectionAsync(context, PrepareInterimText(context, update.StableText), cancellationToken).ConfigureAwait(false);
-        }
-
-        context.Segment.MarkAwaitingFinalization(DateTimeOffset.UtcNow);
+        await SyncInjectionAsync(context, PrepareInterimText(context, currentText), cancellationToken).ConfigureAwait(false);
+        context.Segment.MarkStreamingCompleted(DateTimeOffset.UtcNow);
         _sessionText = context.ContextBefore + context.Segment.InjectedText;
         SegmentUpdated?.Invoke(this, new SegmentEventArgs(context.Segment));
     }
@@ -218,21 +208,6 @@ public sealed class HybridTranscriptionCoordinator
 
         if (!result.Succeeded)
         {
-            // В режиме вставки после паузы в поле ещё ничего нет, и отказ
-            // Whisper означал бы потерю фразы целиком. Вставляем то, что
-            // услышала потоковая модель: хуже по качеству, но лучше, чем ничего.
-            if (IsDeferredInsert && segment.InjectedLength == 0 && segment.StableText.Length > 0)
-            {
-                var fallback = PrepareInterimText(context, segment.StableText);
-                if (await SyncInjectionAsync(context, fallback, cancellationToken).ConfigureAwait(false))
-                {
-                    segment.MarkFinalized(context.Separator + fallback);
-                    _sessionText = context.ContextBefore + segment.InjectedText;
-                    SegmentUpdated?.Invoke(this, new SegmentEventArgs(segment));
-                    return;
-                }
-            }
-
             segment.MarkFailed(result.Error ?? "Whisper не смог обработать сегмент.");
             SegmentUpdated?.Invoke(this, new SegmentEventArgs(segment));
             return;
@@ -522,10 +497,6 @@ public sealed class HybridTranscriptionCoordinator
             : string.Join(' ', words[^whisperSettings.MaxContextWords..]);
     }
 
-    /// <summary>Фраза вставляется целиком после паузы, а не по мере речи.</summary>
-    private bool IsDeferredInsert =>
-        _settings.Current.General.LiveTextMode == LiveTextMode.InsertAfterPause;
-
     private string PrepareInterimText(SegmentContext context, string rawText)
     {
         if (rawText.Length == 0)
@@ -627,6 +598,7 @@ public sealed class HybridTranscriptionCoordinator
             }
 
             var plan = TextDiffProcessor.ComputeTailReplacement(segment.InjectedText, desired, segment.InjectedLength);
+            var injectedBeforeChange = segment.InjectedText;
             _logger.LogInformation(
                 "Фраза {SegmentId}: было {InjectedLength} элементов, станет {DesiredLength}; удалить {Backspaces}, напечатать {ToTypeLength}.",
                 segment.SegmentId,
@@ -660,6 +632,19 @@ public sealed class HybridTranscriptionCoordinator
                     var result = await _injection.InjectAsync(plan.TextToType, cancellationToken).ConfigureAwait(false);
                     if (!result.Success)
                     {
+                        // Удаление хвоста уже произошло. Пытаемся вернуть его,
+                        // чтобы единичный сбой SendInput/буфера не оставил поле
+                        // с исчезнувшим текстом.
+                        var rollbackText = TextElements.Substring(injectedBeforeChange, segment.InjectedLength);
+                        if (rollbackText.Length > 0)
+                        {
+                            var rollback = await _injection.InjectAsync(rollbackText, cancellationToken).ConfigureAwait(false);
+                            if (rollback.Success)
+                            {
+                                segment.RecordInjection(segment.InjectedText + rollback.InjectedText);
+                            }
+                        }
+
                         InjectionProblem?.Invoke(this, new InjectionProblemEventArgs(result.Failure, result.Message ?? "Не удалось вставить текст."));
                         segment.MarkFailed(result.Message ?? "Не удалось вставить текст.");
                         return false;
@@ -685,4 +670,27 @@ public sealed class HybridTranscriptionCoordinator
         separator.Length > 0 && injectedText.StartsWith(separator, StringComparison.Ordinal)
             ? injectedText[separator.Length..]
             : injectedText;
+
+    /// <summary>
+    /// При закрытии фразы разрешено только дописать продолжение. Если финальный
+    /// flush потокового движка пересмотрел уже напечатанные слова, оставляем
+    /// текущий набор: остановка не должна запускать скрытую замену текста.
+    /// </summary>
+    private static string SelectCompletedStreamingText(string previousText, string? completedText)
+    {
+        if (string.IsNullOrWhiteSpace(previousText))
+        {
+            return completedText?.Trim() ?? string.Empty;
+        }
+
+        if (string.IsNullOrWhiteSpace(completedText))
+        {
+            return previousText;
+        }
+
+        var completed = completedText.Trim();
+        return completed.StartsWith(previousText, StringComparison.Ordinal)
+            ? completed
+            : previousText;
+    }
 }

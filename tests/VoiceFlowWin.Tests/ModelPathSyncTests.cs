@@ -36,7 +36,6 @@ public sealed class ModelPathSyncTests : IDisposable
     {
         InstallStreaming("sherpa-onnx-streaming-zipformer-small-ru-vosk-int8-2025-08-16");
         InstallStreaming("sherpa-onnx-streaming-zipformer-en-20M-2023-02-17");
-        InstallWhisper("ggml-small-q5_1");
 
         var settings = new AppSettings();
         var changed = _manager.SynchronizeInstalledPaths(settings);
@@ -44,8 +43,7 @@ public sealed class ModelPathSyncTests : IDisposable
         Assert.True(changed);
         Assert.Equal(Path.Combine(_paths.ModelsDirectory, "sherpa-onnx-streaming-zipformer-small-ru-vosk-int8-2025-08-16"), settings.Streaming.RussianModelPath);
         Assert.Equal(Path.Combine(_paths.ModelsDirectory, "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17"), settings.Streaming.EnglishModelPath);
-        Assert.Equal(Path.Combine(_paths.ModelsDirectory, "ggml-small-q5_1.bin"), settings.Whisper.ModelPath);
-        Assert.Equal("ggml-small-q5_1", settings.Whisper.ModelId);
+        Assert.Equal(string.Empty, settings.Whisper.ModelPath);
     }
 
     [Fact]
@@ -94,7 +92,4 @@ public sealed class ModelPathSyncTests : IDisposable
         Directory.CreateDirectory(directory);
         File.WriteAllText(Path.Combine(directory, "README"), "модель");
     }
-
-    private void InstallWhisper(string id) =>
-        File.WriteAllText(Path.Combine(_paths.ModelsDirectory, id + ".bin"), "веса");
 }

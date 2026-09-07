@@ -1,3 +1,4 @@
+using VoiceFlowWin.Core.Models;
 using VoiceFlowWin.Core.Settings;
 using Xunit;
 
@@ -67,18 +68,18 @@ public sealed class SettingsMigrationTests : IDisposable
     }
 
     [Fact]
-    public void Прежний_режим_ввода_переносится_на_вставку_после_паузы()
+    public void Прежний_режим_ввода_переносится_на_единый_потоковый_набор()
     {
         WriteSettings("""{ "schemaVersion": 2, "general": { "liveTextMode": "SafeStreaming" } }""");
 
         var settings = new SettingsService(_paths).Load();
 
-        Assert.Equal(LiveTextMode.InsertAfterPause, settings.General.LiveTextMode);
+        Assert.Equal(LiveTextMode.MaximumLive, settings.General.LiveTextMode);
         Assert.Equal(SettingsService.CurrentSchemaVersion, settings.SchemaVersion);
     }
 
     [Fact]
-    public void Выбранный_пользователем_режим_ввода_не_меняется()
+    public void Любой_прежний_режим_ввода_заменяется_единым_потоковым()
     {
         WriteSettings("""{ "schemaVersion": 2, "general": { "liveTextMode": "MaximumLive" } }""");
 
@@ -105,7 +106,7 @@ public sealed class SettingsMigrationTests : IDisposable
         var settings = new SettingsService(_paths).Load();
 
         Assert.Equal(HotkeyDefinition.LegacyDefault, settings.General.Hotkey);
-        Assert.Equal(LiveTextMode.InsertAfterPause, settings.General.LiveTextMode);
+        Assert.Equal(LiveTextMode.MaximumLive, settings.General.LiveTextMode);
     }
 
     [Fact]
@@ -127,6 +128,25 @@ public sealed class SettingsMigrationTests : IDisposable
         var settings = new SettingsService(_paths).Load();
 
         Assert.Equal(5000, settings.Segmentation.SilenceToEndSegmentMs);
+    }
+
+    [Fact]
+    public void Финализация_и_автоязык_Whisper_отключаются_при_переносе()
+    {
+        WriteSettings("""
+            {
+              "schemaVersion": 6,
+              "general": { "languageMode": "WhisperAutoDetect" },
+              "whisper": { "fullPassAfterStop": true },
+              "injection": { "safeFinalReplacement": true }
+            }
+            """);
+
+        var settings = new SettingsService(_paths).Load();
+
+        Assert.Equal(LanguageSelectionMode.FollowKeyboardLayout, settings.General.LanguageMode);
+        Assert.False(settings.Whisper.FullPassAfterStop);
+        Assert.False(settings.Injection.SafeFinalReplacement);
     }
 
     [Fact]

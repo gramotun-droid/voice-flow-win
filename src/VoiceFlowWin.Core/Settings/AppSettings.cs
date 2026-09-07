@@ -93,7 +93,7 @@ public sealed class GeneralSettings
 
     public LanguageSelectionMode LanguageMode { get; set; } = LanguageSelectionMode.FollowKeyboardLayout;
 
-    public LiveTextMode LiveTextMode { get; set; } = LiveTextMode.InsertAfterPause;
+    public LiveTextMode LiveTextMode { get; set; } = LiveTextMode.MaximumLive;
 
     public bool AutomaticPunctuation { get; set; } = true;
 
@@ -167,7 +167,7 @@ public sealed class WhisperSettings
     /// это исправляет, но занимает время — на нём приложение показывает курсор
     /// ожидания, чтобы пользователь не начал править текст на середине.
     /// </remarks>
-    public bool FullPassAfterStop { get; set; } = true;
+    public bool FullPassAfterStop { get; set; }
 }
 
 public sealed class InjectionSettings
@@ -180,7 +180,7 @@ public sealed class InjectionSettings
     public int ClipboardRestoreDelayMs { get; set; } = 250;
 
     /// <summary>Разрешать автоматическую замену текста результатом Whisper.</summary>
-    public bool SafeFinalReplacement { get; set; } = true;
+    public bool SafeFinalReplacement { get; set; }
 
     /// <summary>После вмешательства пользователя автозамена запрещена всегда.</summary>
     public bool BlockReplacementAfterIntervention { get; set; } = true;
@@ -245,9 +245,7 @@ public sealed class ModelSettings
 {
     /// <summary>Докачивать недостающие модели сразу после запуска.</summary>
     /// <remarks>
-    /// Каталог целиком весит около 2,6 ГБ, поэтому загрузка идёт в фоне и
-    /// начинается с рекомендованных моделей: диктовка должна стать доступной
-    /// через первые сотни мегабайт, а не после всего набора.
+    /// Модели загружаются в фоне, чтобы первый запуск приложения не блокировался.
     /// </remarks>
     public bool DownloadAllOnStartup { get; set; } = true;
 }

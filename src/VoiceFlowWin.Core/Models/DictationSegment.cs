@@ -119,6 +119,16 @@ public sealed class DictationSegment
         }
     }
 
+    /// <summary>Закрывает фразу без отдельного корректирующего распознавания.</summary>
+    public void MarkStreamingCompleted(DateTimeOffset endedAt)
+    {
+        EndedAt = endedAt;
+        if (!State.IsTerminal())
+        {
+            State = SegmentState.Finalized;
+        }
+    }
+
     public void MarkWhisperProcessing()
     {
         if (State == SegmentState.AwaitingFinalization)

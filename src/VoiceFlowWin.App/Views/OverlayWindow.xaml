@@ -16,12 +16,11 @@
     <Border Background="#E61F2430" CornerRadius="10" Padding="12" BorderBrush="#FF3A4356" BorderThickness="1">
         <StackPanel>
 
-            <!-- Строка состояния: микрофон, уровень, язык, Whisper -->
+            <!-- Строка состояния: микрофон, уровень и язык -->
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
@@ -37,37 +36,20 @@
                     <TextBlock Text="{Binding LanguageText}" FontSize="11" />
                 </Border>
 
-                <TextBlock Grid.Column="3" Text="Whisper…" Margin="8,0,0,0" FontSize="11"
-                           Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"
-                           Visibility="{Binding WhisperBusy, Converter={StaticResource BoolToVisibility}}" />
             </Grid>
 
             <TextBlock Text="{Binding StatusText}" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
 
-            <!-- Распознанный текст: стабильная часть и изменяемый хвост -->
+            <!-- Текущая потоковая гипотеза целиком -->
             <TextBlock x:Name="TextArea" Margin="0,8,0,0" TextWrapping="Wrap" MaxHeight="120">
                 <Run Text="{Binding StableText, Mode=OneWay}" />
-                <Run Text="{Binding VolatileTail, Mode=OneWay}" Foreground="#FF9AA5B8" FontStyle="Italic" />
             </TextBlock>
 
             <!-- Предупреждение о вмешательстве пользователя -->
             <Border Background="#33F59E0B" CornerRadius="6" Padding="8" Margin="0,8,0,0"
                     Visibility="{Binding InterventionWarning, Converter={StaticResource BoolToVisibility}}">
-                <TextBlock Text="Текст правился вручную — автоматическая замена отключена для этой фразы."
+                <TextBlock Text="Цель ввода изменилась — дальнейшая печать этой фразы остановлена."
                            TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource WarningBrush}" />
-            </Border>
-
-            <!-- Финальный текст, который не был подставлен автоматически -->
-            <Border Background="#FF2A3140" CornerRadius="6" Padding="8" Margin="0,8,0,0"
-                    Visibility="{Binding HasBlockedResult, Converter={StaticResource BoolToVisibility}}">
-                <StackPanel>
-                    <TextBlock Text="Результат Whisper:" Style="{StaticResource MutedText}" />
-                    <TextBlock Text="{Binding BlockedFinalText}" TextWrapping="Wrap" Margin="0,4,0,8" />
-                    <StackPanel Orientation="Horizontal">
-                        <Button Content="Заменить" Command="{Binding ApplyManualReplacementCommand}" />
-                        <Button Content="Копировать" Command="{Binding CopyFinalTextCommand}" />
-                    </StackPanel>
-                </StackPanel>
             </Border>
 
             <StackPanel Orientation="Horizontal" Margin="0,10,0,0">

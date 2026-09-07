@@ -16,11 +16,7 @@ public class HybridTranscriptionCoordinatorTests
 
     private sealed class Harness
     {
-        /// <summary>
-        /// Режим ввода задаётся явно: сценарии потокового ввода проверяют именно
-        /// его, а умолчанием стала вставка фразы после паузы.
-        /// </summary>
-        public Harness(LiveTextMode mode = LiveTextMode.SafeStreaming)
+        public Harness(LiveTextMode mode = LiveTextMode.MaximumLive)
         {
             Field = new FakeTextField();
             Injection = new FakeInjectionService(Field);
@@ -88,7 +84,7 @@ public class HybridTranscriptionCoordinatorTests
     }
 
     [Fact]
-    public async Task Вставка_после_паузы_не_трогает_поле_во_время_речи()
+    public async Task Старый_режим_после_паузы_не_скрывает_текущий_текст()
     {
         var harness = new Harness(LiveTextMode.InsertAfterPause);
 
@@ -96,29 +92,21 @@ public class HybridTranscriptionCoordinatorTests
             new[] { "нам нужно", "нам нужно разработать", "нам нужно разработать систему" },
             "нам нужно разработать систему");
 
-        // Пока Whisper не ответил, в поле не должно быть ничего: пользователь
-        // видит распознанное только в overlay.
-        Assert.Equal(string.Empty, harness.Field.Content);
+        // Сохранённая настройка старой версии больше не должна возвращать
+        // серый невведённый хвост.
+        Assert.Equal("Нам нужно разработать систему", harness.Field.Content);
         Assert.Equal("нам нужно разработать систему", segment.StableText);
-
-        await harness.ApplyWhisperAsync(segment.SegmentId, "Нам нужно разработать систему.");
-
-        Assert.Equal("Нам нужно разработать систему.", harness.Field.Content);
         Assert.Equal(SegmentState.Finalized, segment.State);
     }
 
     [Fact]
-    public async Task Вставка_после_паузы_переживает_отказ_Whisper()
+    public async Task Завершение_сегмента_сохраняет_потоковый_текст()
     {
         var harness = new Harness(LiveTextMode.InsertAfterPause);
 
         var segment = await harness.DictateAsync(new[] { "фраза целиком" }, "фраза целиком");
 
-        await harness.Coordinator.ApplyFinalRecognitionAsync(
-            FinalRecognitionResult.Failure(segment.SegmentId, "модель не загружена", TimeSpan.Zero),
-            CancellationToken.None);
-
-        // Терять фразу нельзя: в поле уходит то, что услышал Vosk.
+        // Никакого второго распознавания после этого не запускается.
         Assert.Equal("Фраза целиком", harness.Field.Content);
         Assert.Equal(SegmentState.Finalized, segment.State);
     }
@@ -129,12 +117,9 @@ public class HybridTranscriptionCoordinatorTests
         var harness = new Harness(LiveTextMode.InsertAfterPause);
 
         var first = await harness.DictateAsync(new[] { "первая фраза" }, "первая фраза");
-        await harness.ApplyWhisperAsync(first.SegmentId, "Первая фраза.");
-
         var second = await harness.DictateAsync(new[] { "вторая фраза" }, "вторая фраза");
-        await harness.ApplyWhisperAsync(second.SegmentId, "Вторая фраза.");
 
-        Assert.Equal("Первая фраза. Вторая фраза.", harness.Field.Content);
+        Assert.Equal("Первая фраза вторая фраза", harness.Field.Content);
     }
 
     [Fact]
@@ -196,7 +181,7 @@ public class HybridTranscriptionCoordinatorTests
     }
 
     [Fact]
-    public async Task Сценарий_2_Whisper_заменяет_только_свой_сегмент()
+    public async Task Потоковый_финал_не_запускает_последующую_замену()
     {
         var harness = new Harness();
 
@@ -204,10 +189,51 @@ public class HybridTranscriptionCoordinatorTests
             new[] { "нам нужно разработать новый", "нам нужно разработать новый система" },
             "нам нужно разработать новый система");
 
-        await harness.ApplyWhisperAsync(segment.SegmentId, "Нам нужно разработать новую систему.");
-
-        Assert.Equal("Нам нужно разработать новую систему.", harness.Field.Content);
+        Assert.Equal("Нам нужно разработать новый система", harness.Field.Content);
         Assert.Equal(SegmentState.Finalized, segment.State);
+    }
+
+    [Fact]
+    public async Task Завершение_не_переписывает_уже_напечатанный_текст()
+    {
+        var harness = new Harness();
+        var segment = harness.Coordinator.BeginSegment(RecognitionLanguage.Russian);
+
+        await harness.Coordinator.OnPartialResultAsync(
+            segment.SegmentId,
+            "текущий набранный текст",
+            Start,
+            CancellationToken.None);
+        var beforeStop = harness.Field.Content;
+
+        await harness.Coordinator.EndSegmentAsync(
+            segment.SegmentId,
+            "совсем другой результат при завершении",
+            Array.Empty<byte>(),
+            CancellationToken.None);
+
+        Assert.Equal(beforeStop, harness.Field.Content);
+        Assert.Equal(SegmentState.Finalized, segment.State);
+    }
+
+    [Fact]
+    public async Task Ошибка_печати_после_удаления_восстанавливает_прежний_хвост()
+    {
+        var harness = new Harness();
+        var segment = harness.Coordinator.BeginSegment(RecognitionLanguage.Russian);
+
+        await harness.Coordinator.OnPartialResultAsync(segment.SegmentId, "нам нужно новый", Start, CancellationToken.None);
+        var beforeCorrection = harness.Field.Content;
+        harness.Injection.FailNextInjection = true;
+
+        await harness.Coordinator.OnPartialResultAsync(
+            segment.SegmentId,
+            "нам нужно новую",
+            Start.AddMilliseconds(200),
+            CancellationToken.None);
+
+        Assert.Equal(beforeCorrection, harness.Field.Content);
+        Assert.Equal(SegmentState.Failed, segment.State);
     }
 
     [Fact]
@@ -216,14 +242,12 @@ public class HybridTranscriptionCoordinatorTests
         var harness = new Harness();
 
         var first = await harness.DictateAsync(new[] { "первая фраза целиком" }, "первая фраза целиком");
-        await harness.ApplyWhisperAsync(first.SegmentId, "Первая фраза целиком.");
         var afterFirst = harness.Field.Content;
 
         var second = await harness.DictateAsync(new[] { "вторая фраза" }, "вторая фраза");
-        await harness.ApplyWhisperAsync(second.SegmentId, "Вторая фраза.");
 
         Assert.StartsWith(afterFirst, harness.Field.Content, StringComparison.Ordinal);
-        Assert.Equal("Первая фраза целиком. Вторая фраза.", harness.Field.Content);
+        Assert.Equal("Первая фраза целиком вторая фраза", harness.Field.Content);
     }
 
     [Fact]
@@ -319,9 +343,7 @@ public class HybridTranscriptionCoordinatorTests
         // Промежуточный результат уже показывает термины латиницей.
         Assert.Contains("GitHub", harness.Field.Content, StringComparison.Ordinal);
 
-        await harness.ApplyWhisperAsync(segment.SegmentId, "Открой GitHub и создай pull request.");
-
-        Assert.Equal("Открой GitHub и создай pull request.", harness.Field.Content);
+        Assert.Equal("Открой GitHub и создай pull request", harness.Field.Content);
     }
 
     [Fact]
@@ -373,7 +395,7 @@ public class HybridTranscriptionCoordinatorTests
     }
 
     [Fact]
-    public async Task Безопасный_режим_не_удаляет_ничего_при_переписывании_хвоста()
+    public async Task Старый_безопасный_режим_тоже_печатает_и_обновляет_весь_хвост()
     {
         var harness = new Harness();
 
@@ -381,7 +403,8 @@ public class HybridTranscriptionCoordinatorTests
         await harness.Coordinator.OnPartialResultAsync(segment.SegmentId, "нам нужно новый система", Start, CancellationToken.None);
         await harness.Coordinator.OnPartialResultAsync(segment.SegmentId, "нам нужно новую систему", Start.AddMilliseconds(200), CancellationToken.None);
 
-        Assert.Equal(0, harness.Field.TotalDeletedElements);
+        Assert.Equal("Нам нужно новую систему", harness.Field.Content);
+        Assert.True(harness.Field.TotalDeletedElements > 0);
     }
 
     [Fact]

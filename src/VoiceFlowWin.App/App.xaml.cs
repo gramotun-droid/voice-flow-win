@@ -18,7 +18,6 @@ using VoiceFlowWin.Core.Models;
 using VoiceFlowWin.Core.Settings;
 using VoiceFlowWin.Updater;
 using VoiceFlowWin.SherpaEngine;
-using VoiceFlowWin.WhisperEngine;
 using VoiceFlowWin.Windows.Audio;
 using VoiceFlowWin.Windows.Input;
 using VoiceFlowWin.Windows.System;
@@ -35,7 +34,6 @@ public partial class App : Application
     private OverlayWindow? _overlay;
     private SettingsWindow? _settingsWindow;
     private CancellationTokenSource? _modelDownloads;
-    private BusyCursorScope? _busyCursor;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -113,21 +111,6 @@ public partial class App : Application
         _overlay = _services.GetRequiredService<OverlayWindow>();
         _overlay.SyncVisibility();
 
-        // Пока идёт проход по всей диктовке, курсор показывает занятость:
-        // ручная правка в этот момент отменила бы замену текста.
-        controller.FullPassRunningChanged += (_, running) => Dispatcher.BeginInvoke(() =>
-        {
-            if (running)
-            {
-                _busyCursor ??= BusyCursorScope.Begin(_services.GetRequiredService<ILogger<App>>());
-            }
-            else
-            {
-                _busyCursor?.Dispose();
-                _busyCursor = null;
-            }
-        });
-
         _tray = _services.GetRequiredService<TrayIconHost>();
         _tray.ShowSettingsRequested += (_, _) => ShowSettings();
         _tray.ToggleDictationRequested += (_, _) => controller.Toggle();
@@ -170,10 +153,6 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        // Системный курсор — общий ресурс: оставить его «песочными часами»
-        // после выхода нельзя.
-        _busyCursor?.Dispose();
-
         // Незавершённая загрузка модели прерывается: временный файл останется
         // в каталоге обновлений моделей и будет перекачан при следующем старте.
         _modelDownloads?.Cancel();
@@ -210,7 +189,7 @@ public partial class App : Application
 
     /// <summary>Без моделей приложение работать не может — предлагаем скачать их сразу.</summary>
     private static bool RequiresFirstRunSetup(AppSettings settings) =>
-        string.IsNullOrWhiteSpace(settings.Streaming.RussianModelPath) || string.IsNullOrWhiteSpace(settings.Whisper.ModelPath);
+        string.IsNullOrWhiteSpace(settings.Streaming.RussianModelPath);
 
     private static ServiceProvider BuildServices()
     {
@@ -263,10 +242,6 @@ public partial class App : Application
 
         services.AddSingleton<ZipformerModelLoader>();
         services.AddSingleton<IStreamingRecognizer, StreamingZipformerRecognizer>();
-        services.AddSingleton<IFinalRecognizer, WhisperFinalRecognizer>();
-        services.AddSingleton<WhisperTranscriptionQueue>();
-        services.AddSingleton<IFinalRecognitionQueue>(provider => provider.GetRequiredService<WhisperTranscriptionQueue>());
-
         services.AddSingleton<HybridTranscriptionCoordinator>();
         services.AddSingleton<DictationController>();
 

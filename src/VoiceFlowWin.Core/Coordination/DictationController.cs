@@ -14,7 +14,6 @@ public enum DictationState
     Preparing,
     Listening,
     Speaking,
-    Finalizing,
     Error,
 }
 
@@ -32,11 +31,11 @@ public sealed class DictationStateEventArgs : EventArgs
 }
 
 /// <summary>
-/// Сводит воедино микрофон, VAD, Zipformer, Whisper и координатор текста.
+/// Сводит воедино микрофон, VAD, потоковый Zipformer и координатор текста.
 /// </summary>
 /// <remarks>
 /// Все события приходят из разных потоков: аудио — из потока WASAPI, гипотезы
-/// потоковая модель — из потока распознавания, результаты Whisper — из очереди, нажатия
+/// потоковая модель — из потока распознавания, нажатия
 /// клавиш — из потока хука. Работать с состоянием сегментов из всех этих
 /// потоков одновременно нельзя, поэтому события не выполняются на месте, а
 /// складываются в канал и обрабатываются строго по одному в единственном
@@ -48,7 +47,6 @@ public sealed class DictationController : IAsyncDisposable
     private readonly IAudioCaptureService _capture;
     private readonly IStreamingRecognizer _streaming;
     private readonly ISpeechSegmenter _segmenter;
-    private readonly IFinalRecognitionQueue _finalQueue;
     private readonly HybridTranscriptionCoordinator _coordinator;
     private readonly IGlobalHotkeyService _hotkeys;
     private readonly IEscapeStopService _escape;
@@ -68,15 +66,8 @@ public sealed class DictationController : IAsyncDisposable
     private readonly CancellationTokenSource _shutdown = new();
     private readonly Task _pump;
 
-    /// <summary>Сколько ждать результата прохода по всей диктовке.</summary>
-    private static readonly TimeSpan FullPassTimeout = TimeSpan.FromMinutes(2);
-
-    /// <summary>Сколько ждать, пока применятся результаты уже отправленных фраз.</summary>
-    private static readonly TimeSpan PendingResultsTimeout = TimeSpan.FromSeconds(30);
-
-    private static readonly TimeSpan PendingResultsPollInterval = TimeSpan.FromMilliseconds(100);
-
     private long? _currentSegmentId;
+    private SpeechSegmentEventArgs? _forcedCompletion;
 
     /// <summary>Окно, в котором началась текущая диктовка.</summary>
     private WindowFocusSnapshot _sessionFocus = WindowFocusSnapshot.Unknown;
@@ -87,7 +78,6 @@ public sealed class DictationController : IAsyncDisposable
         IAudioCaptureService capture,
         IStreamingRecognizer streaming,
         ISpeechSegmenter segmenter,
-        IFinalRecognitionQueue finalQueue,
         HybridTranscriptionCoordinator coordinator,
         IGlobalHotkeyService hotkeys,
         IEscapeStopService escape,
@@ -100,7 +90,6 @@ public sealed class DictationController : IAsyncDisposable
         _capture = capture;
         _streaming = streaming;
         _segmenter = segmenter;
-        _finalQueue = finalQueue;
         _coordinator = coordinator;
         _hotkeys = hotkeys;
         _escape = escape;
@@ -116,7 +105,6 @@ public sealed class DictationController : IAsyncDisposable
         _segmenter.SegmentCompleted += OnSegmentCompleted;
         _segmenter.LevelChanged += (_, level) => LevelChanged?.Invoke(this, level);
         _streaming.PartialResult += OnPartialResult;
-        _finalQueue.ResultReady += OnFinalResultReady;
         _hotkeys.HotkeyTriggered += OnHotkeyTriggered;
         _escape.EscapePressed += OnEscapePressed;
         _intervention.InterventionDetected += OnInterventionDetected;
@@ -131,14 +119,6 @@ public sealed class DictationController : IAsyncDisposable
     public event EventHandler<DictationStateEventArgs>? StateChanged;
 
     public event EventHandler<AudioLevelInfo>? LevelChanged;
-
-    /// <summary>Идёт ли сейчас проход по всей диктовке.</summary>
-    /// <remarks>
-    /// Пока он идёт, приложение переписывает уже введённый текст, поэтому
-    /// интерфейс показывает курсор ожидания: правка пользователем в этот
-    /// момент привела бы к отказу от замены и потере результата.
-    /// </remarks>
-    public event EventHandler<bool>? FullPassRunningChanged;
 
     /// <summary>Регистрирует горячую клавишу. Вызывается при старте и после изменения настроек.</summary>
     public bool ApplyHotkeySettings()
@@ -179,7 +159,6 @@ public sealed class DictationController : IAsyncDisposable
         _segmenter.SpeechStarted -= OnSpeechStarted;
         _segmenter.SegmentCompleted -= OnSegmentCompleted;
         _streaming.PartialResult -= OnPartialResult;
-        _finalQueue.ResultReady -= OnFinalResultReady;
         _hotkeys.HotkeyTriggered -= OnHotkeyTriggered;
         _escape.EscapePressed -= OnEscapePressed;
         _intervention.InterventionDetected -= OnInterventionDetected;
@@ -257,8 +236,6 @@ public sealed class DictationController : IAsyncDisposable
         }
 
         IsDictating = false;
-        SetState(DictationState.Finalizing);
-
         _capture.Stop();
         _escape.Disarm();
 
@@ -273,105 +250,23 @@ public sealed class DictationController : IAsyncDisposable
             return;
         }
 
-        // Незавершённый сегмент нужно закрыть: иначе последняя фраза
-        // осталась бы без финальной обработки Whisper.
+        // ForceComplete синхронно публикует последний аудиосегмент. Обычные
+        // события идут через канал, но здесь текущая работа уже выполняется в
+        // этом канале, поэтому сегмент закрываем прямо сейчас. Иначе событие
+        // дошло бы только после EndSession и последнее слово потерялось бы.
+        _forcedCompletion = null;
         _segmenter.ForceComplete(reason);
-        await Task.Yield();
+        if (_forcedCompletion is { } completion)
+        {
+            await CompleteSegmentAsync(completion, cancellationToken).ConfigureAwait(false);
+            _forcedCompletion = null;
+        }
 
-        await WaitForPendingResultsAsync(cancellationToken).ConfigureAwait(false);
         var sessionAudio = _coordinator.BuildSessionAudio();
-        await RunFullPassAsync(sessionAudio, cancellationToken).ConfigureAwait(false);
         await SaveHistoryAsync(sessionAudio, cancellationToken).ConfigureAwait(false);
 
         _coordinator.EndSession();
         SetState(DictationState.Idle);
-    }
-
-    /// <summary>Прогоняет всю диктовку целиком и заменяет введённый текст.</summary>
-    /// <remarks>
-    /// Отдельные фразы уже исправлены, но между собой они не согласованы:
-    /// Whisper видел каждую по отдельности. Проход по всей записи видит их
-    /// вместе — отсюда общая пунктуация и формы слов. Любая ошибка прохода
-    /// оставляет пофразный результат нетронутым: он уже в поле.
-    /// </remarks>
-    private async Task RunFullPassAsync(byte[] audio, CancellationToken cancellationToken)
-    {
-        if (!_settings.Current.Whisper.FullPassAfterStop)
-        {
-            _logger.LogInformation("Проход по всей диктовке выключен в настройках.");
-            return;
-        }
-
-        var injected = _coordinator.SessionInjectedText;
-        if (audio.Length == 0 || injected.Length == 0)
-        {
-            _logger.LogInformation(
-                "Проход по всей диктовке пропущен: звука {AudioBytes} Б, введено {InjectedLength} символов.",
-                audio.Length,
-                injected.Length);
-            return;
-        }
-
-        FullPassRunningChanged?.Invoke(this, true);
-        var started = DateTimeOffset.UtcNow;
-
-        try
-        {
-            var language = ResolveLanguage(_sessionFocus);
-            _logger.LogInformation(
-                "Проход по всей диктовке начат: {Seconds:0.0} с звука, язык {Language}, в поле {InjectedLength} символов.",
-                audio.Length / (double)(AudioFormat.SampleRate * AudioFormat.BytesPerSample),
-                language,
-                injected.Length);
-
-            // Время прохода ограничено: Whisper на длинной записи может считать
-            // минутами, а всё это время пользователь видит «Финализация» и
-            // курсор ожидания. Лучше отказаться от прохода, чем висеть.
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(FullPassTimeout);
-
-            var request = new FinalRecognitionRequest(
-                SegmentId: 0,
-                Pcm: audio,
-                Language: language,
-                PreviousContext: null);
-
-            var result = await _finalQueue.TranscribeNowAsync(request, timeout.Token).ConfigureAwait(false);
-            if (!result.Succeeded || result.Text.Length == 0)
-            {
-                _logger.LogWarning(
-                    "Проход по всей диктовке не дал результата за {Elapsed}: {Error}",
-                    DateTimeOffset.UtcNow - started,
-                    result.Error ?? "пустой текст");
-                return;
-            }
-
-            _logger.LogInformation(
-                "Проход по всей диктовке распознал за {Elapsed}: {TextLength} символов.",
-                DateTimeOffset.UtcNow - started,
-                result.Text.Length);
-
-            var applied = await _coordinator.ApplySessionCorrectionAsync(result.Text, timeout.Token).ConfigureAwait(false);
-            _logger.LogInformation(
-                applied
-                    ? "Текст диктовки заменён результатом полного прохода."
-                    : "Замена по результату полного прохода не выполнена.");
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            _logger.LogWarning(
-                "Проход по всей диктовке прерван по таймауту {Timeout}. В поле остался пофразный результат.",
-                FullPassTimeout);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            // Пофразный результат уже в поле — отказ прохода ничего не портит.
-            _logger.LogWarning(ex, "Проход по всей диктовке не выполнен.");
-        }
-        finally
-        {
-            FullPassRunningChanged?.Invoke(this, false);
-        }
     }
 
     private async Task SaveHistoryAsync(byte[] audio, CancellationToken cancellationToken)
@@ -400,32 +295,9 @@ public sealed class DictationController : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            // История — опциональная функция: ошибка диска не должна оставлять
-            // диктовку в состоянии Finalizing после успешной вставки текста.
+            // История — опциональная функция: ошибка диска не должна мешать
+            // успешно завершить диктовку.
             _logger.LogWarning(ex, "Сеанс диктовки не удалось сохранить в локальную историю.");
-        }
-    }
-
-    /// <summary>Ждёт, пока применятся результаты уже отправленных фраз.</summary>
-    /// <remarks>
-    /// Полный проход заменяет весь введённый текст, поэтому он обязан начаться
-    /// после того, как последние фразы окажутся в поле. Иначе запоздавший
-    /// результат фразы допишется поверх уже заменённого текста.
-    /// </remarks>
-    private async Task WaitForPendingResultsAsync(CancellationToken cancellationToken)
-    {
-        var deadline = DateTimeOffset.UtcNow + PendingResultsTimeout;
-
-        while (_finalQueue.PendingCount > 0 && DateTimeOffset.UtcNow < deadline)
-        {
-            await Task.Delay(PendingResultsPollInterval, cancellationToken).ConfigureAwait(false);
-        }
-
-        if (_finalQueue.PendingCount > 0)
-        {
-            _logger.LogWarning(
-                "Ожидание последних фраз прервано по таймауту: в очереди осталось {Pending}.",
-                _finalQueue.PendingCount);
         }
     }
 
@@ -468,7 +340,18 @@ public sealed class DictationController : IAsyncDisposable
         await _coordinator.OnPartialResultAsync(segmentId, e.Text, DateTimeOffset.UtcNow, token).ConfigureAwait(false);
     });
 
-    private void OnSegmentCompleted(object? sender, SpeechSegmentEventArgs e) => Post(async token =>
+    private void OnSegmentCompleted(object? sender, SpeechSegmentEventArgs e)
+    {
+        if (!IsDictating)
+        {
+            _forcedCompletion = e;
+            return;
+        }
+
+        Post(token => CompleteSegmentAsync(e, token));
+    }
+
+    private async Task CompleteSegmentAsync(SpeechSegmentEventArgs e, CancellationToken token)
     {
         if (_currentSegmentId is not { } segmentId)
         {
@@ -485,25 +368,6 @@ public sealed class DictationController : IAsyncDisposable
 
         await _coordinator.EndSegmentAsync(segmentId, streamingFinal, e.Pcm, token).ConfigureAwait(false);
 
-        var segment = _coordinator.FindSegment(segmentId);
-        if (segment is not null && e.Pcm.Length > 0)
-        {
-            var language = _settings.Current.General.LanguageMode == LanguageSelectionMode.WhisperAutoDetect
-                ? RecognitionLanguage.Auto
-                : segment.Language;
-
-            var context = _coordinator.BuildWhisperContext();
-            var accepted = _finalQueue.Enqueue(new FinalRecognitionRequest(segmentId, e.Pcm, language, context));
-
-            _logger.LogInformation(
-                "Фраза {SegmentId} отправлена в Whisper: язык {Language}, контекст {ContextLength} символов, принята: {Accepted}, в очереди {Pending}.",
-                segmentId,
-                language,
-                context?.Length ?? 0,
-                accepted,
-                _finalQueue.PendingCount);
-        }
-
         _currentSegmentId = null;
         _streaming.ResetSegment();
 
@@ -511,20 +375,7 @@ public sealed class DictationController : IAsyncDisposable
         {
             SetState(DictationState.Listening);
         }
-    });
-
-    private void OnFinalResultReady(object? sender, FinalRecognitionResult result) => Post(async token =>
-    {
-        _logger.LogInformation(
-            "Whisper вернул для фразы {SegmentId} за {Duration}: успех {Succeeded}, текст {TextLength} символов{Error}",
-            result.SegmentId,
-            result.Duration,
-            result.Succeeded,
-            result.Text.Length,
-            result.Error is null ? string.Empty : ", ошибка: " + result.Error);
-
-        await _coordinator.ApplyFinalRecognitionAsync(result, token).ConfigureAwait(false);
-    });
+    }
 
     private void OnHotkeyTriggered(object? sender, HotkeyEventArgs e)
     {
@@ -582,7 +433,7 @@ public sealed class DictationController : IAsyncDisposable
     /// Собственные окна приложения целью диктовки быть не могут. Проверка не
     /// теоретическая: overlay показывается ровно в момент начала диктовки, и
     /// когда снимок попадал на него, язык сегмента определялся по раскладке
-    /// нашего же окна — русская речь уходила в Whisper как английская. По той
+    /// нашего же окна — русская речь уходила в распознаватель как английская. По той
     /// же причине от него нельзя отсчитывать вмешательство пользователя.
     /// </remarks>
     internal WindowFocusSnapshot CaptureTargetFocus()

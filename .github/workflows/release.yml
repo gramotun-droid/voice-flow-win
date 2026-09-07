@@ -202,8 +202,6 @@ jobs:
           $licenses = @('Сторонние компоненты VoiceFlowWin', '')
           $packages = @(
             'sherpa-onnx (Apache-2.0) — потоковое распознавание речи',
-            'Whisper.net и Whisper.net.Runtime (MIT) — обёртка whisper.cpp',
-            'whisper.cpp (MIT) — финальное распознавание',
             'NAudio (MIT) — захват звука через WASAPI',
             'Microsoft.Extensions.* (MIT) — внедрение зависимостей и логирование',
             'xunit (Apache-2.0) — тесты'

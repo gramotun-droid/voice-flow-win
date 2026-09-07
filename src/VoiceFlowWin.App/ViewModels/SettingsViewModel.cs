@@ -126,7 +126,6 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
 
         RussianModelChoices = [];
         EnglishModelChoices = [];
-        WhisperModelChoices = [];
         RefreshModelChoices();
 
         SaveCommand = new RelayCommand(Save);
@@ -160,8 +159,6 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     public ObservableCollection<ModelChoice> RussianModelChoices { get; }
 
     public ObservableCollection<ModelChoice> EnglishModelChoices { get; }
-
-    public ObservableCollection<ModelChoice> WhisperModelChoices { get; }
 
     public RelayCommand SaveCommand { get; }
 
@@ -384,14 +381,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
     {
         var persisted = Clone(_settingsService.Current);
 
-        if (descriptor.Kind == ModelKind.Whisper)
-        {
-            Draft.Whisper.ModelPath = path;
-            Draft.Whisper.ModelId = descriptor.Id;
-            persisted.Whisper.ModelPath = path;
-            persisted.Whisper.ModelId = descriptor.Id;
-        }
-        else if (descriptor.Language == RecognitionLanguage.English)
+        if (descriptor.Language == RecognitionLanguage.English)
         {
             Draft.Streaming.EnglishModelPath = path;
             persisted.Streaming.EnglishModelPath = path;
@@ -493,15 +483,12 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         // возвращаются на место после перестроения.
         var russian = Draft.Streaming.RussianModelPath;
         var english = Draft.Streaming.EnglishModelPath;
-        var whisper = Draft.Whisper.ModelPath;
 
         Fill(RussianModelChoices, ModelKind.Streaming, RecognitionLanguage.Russian, russian);
         Fill(EnglishModelChoices, ModelKind.Streaming, RecognitionLanguage.English, english);
-        Fill(WhisperModelChoices, ModelKind.Whisper, null, whisper);
 
         Draft.Streaming.RussianModelPath = russian;
         Draft.Streaming.EnglishModelPath = english;
-        Draft.Whisper.ModelPath = whisper;
         OnPropertyChanged(nameof(Draft));
     }
 
@@ -553,15 +540,12 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         {
             var changed =
                 Draft.Streaming.RussianModelPath != settings.Streaming.RussianModelPath ||
-                Draft.Streaming.EnglishModelPath != settings.Streaming.EnglishModelPath ||
-                Draft.Whisper.ModelPath != settings.Whisper.ModelPath;
+                Draft.Streaming.EnglishModelPath != settings.Streaming.EnglishModelPath;
 
             if (changed)
             {
                 Draft.Streaming.RussianModelPath = settings.Streaming.RussianModelPath;
                 Draft.Streaming.EnglishModelPath = settings.Streaming.EnglishModelPath;
-                Draft.Whisper.ModelPath = settings.Whisper.ModelPath;
-                Draft.Whisper.ModelId = settings.Whisper.ModelId;
                 OnPropertyChanged(nameof(Draft));
             }
 

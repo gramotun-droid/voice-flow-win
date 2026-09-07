@@ -70,10 +70,10 @@ public class ModelCatalogTests
     }
 
     [Fact]
-    public void Есть_по_модели_на_каждую_роль()
+    public void Есть_потоковая_модель_на_каждый_поддерживаемый_язык()
     {
         Assert.Contains(ModelCatalog.Recommended, model => model.Kind == ModelKind.Streaming && model.Language == RecognitionLanguage.Russian);
         Assert.Contains(ModelCatalog.Recommended, model => model.Kind == ModelKind.Streaming && model.Language == RecognitionLanguage.English);
-        Assert.Contains(ModelCatalog.Recommended, model => model.Kind == ModelKind.Whisper);
+        Assert.DoesNotContain(ModelCatalog.All, model => model.Kind == ModelKind.Whisper);
     }
 }

@@ -33,7 +33,6 @@
     <ProjectReference Include="..\VoiceFlowWin.Core\VoiceFlowWin.Core.csproj" />
     <ProjectReference Include="..\VoiceFlowWin.Audio\VoiceFlowWin.Audio.csproj" />
     <ProjectReference Include="..\VoiceFlowWin.SherpaOnnx\VoiceFlowWin.SherpaOnnx.csproj" />
-    <ProjectReference Include="..\VoiceFlowWin.Whisper\VoiceFlowWin.Whisper.csproj" />
     <ProjectReference Include="..\VoiceFlowWin.Windows\VoiceFlowWin.Windows.csproj" />
     <ProjectReference Include="..\VoiceFlowWin.Updater\VoiceFlowWin.Updater.csproj" />
   </ItemGroup>

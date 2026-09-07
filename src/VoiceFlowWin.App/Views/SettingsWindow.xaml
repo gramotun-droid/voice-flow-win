@@ -63,25 +63,9 @@
                                      IsChecked="{Binding Draft.General.LanguageMode, Converter={StaticResource EnumMatch}, ConverterParameter=AlwaysRussian}" />
                         <RadioButton GroupName="Language" Content="Всегда английский"
                                      IsChecked="{Binding Draft.General.LanguageMode, Converter={StaticResource EnumMatch}, ConverterParameter=AlwaysEnglish}" />
-                        <RadioButton GroupName="Language" Content="Автоопределение Whisper"
-                                     IsChecked="{Binding Draft.General.LanguageMode, Converter={StaticResource EnumMatch}, ConverterParameter=WhisperAutoDetect}" />
-
                         <TextBlock Text="Как текст попадает в поле" Style="{StaticResource SectionHeader}" />
-
-                        <RadioButton GroupName="Live" Content="Вставлять фразу целиком после паузы"
-                                     IsChecked="{Binding Draft.General.LiveTextMode, Converter={StaticResource EnumMatch}, ConverterParameter=InsertAfterPause}" />
-                        <TextBlock Style="{StaticResource MutedText}" Margin="22,0,0,6"
-                                   Text="Пока идёт речь, поле не трогается: слова видны только в overlay. После паузы фраза вставляется один раз и сразу проверенной Whisper." />
-
-                        <RadioButton GroupName="Live" Content="Печатать по мере речи, только стабильные слова"
-                                     IsChecked="{Binding Draft.General.LiveTextMode, Converter={StaticResource EnumMatch}, ConverterParameter=SafeStreaming}" />
-                        <TextBlock Style="{StaticResource MutedText}" Margin="22,0,0,6"
-                                   Text="Текст появляется во время речи, изменяемый хвост остаётся в overlay, а готовую фразу приложение заменяет на исправленную." />
-
-                        <RadioButton GroupName="Live" Content="Печатать всё, включая изменяемый хвост"
-                                     IsChecked="{Binding Draft.General.LiveTextMode, Converter={StaticResource EnumMatch}, ConverterParameter=MaximumLive}" />
-                        <TextBlock Style="{StaticResource MutedText}" Margin="22,0,0,0"
-                                   Text="Самый живой и самый рискованный: хвост переписывается нажатиями Backspace, что совместимо не со всеми приложениями." />
+                        <TextBlock Style="{StaticResource MutedText}"
+                                   Text="Текущий результат Zipformer сразу печатается целиком. Отдельной финализации и последующей замены текста нет." />
 
                         <TextBlock Style="{StaticResource MutedText}" Margin="0,8,0,0"
                                    Text="Длительность паузы, после которой фраза считается законченной, задаётся на вкладке «Микрофон»." />
@@ -139,7 +123,7 @@
                                Text="Модели не входят в установщик и хранятся в папке данных пользователя. Обновление приложения их не удаляет." />
 
                     <CheckBox DockPanel.Dock="Top" Margin="0,0,0,8"
-                              Content="Скачивать все модели автоматически при запуске (весь набор — около 2,6 ГБ)"
+                              Content="Скачивать все модели автоматически при запуске (весь набор — около 152 МБ)"
                               IsChecked="{Binding Draft.Models.DownloadAllOnStartup}" />
 
                     <ListView ItemsSource="{Binding Models}" SelectedItem="{Binding SelectedModel}"
@@ -189,34 +173,8 @@
                         <TextBlock Text="Частота промежуточных результатов, мс" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
                         <TextBox Text="{Binding Draft.Streaming.PartialResultIntervalMs}" Width="120" HorizontalAlignment="Left" />
 
-                        <TextBlock Text="Подтверждений для стабильного слова" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
-                        <TextBox Text="{Binding Draft.Streaming.StableRepeats}" Width="120" HorizontalAlignment="Left" />
-
-                        <TextBlock Text="Задержка стабилизации, мс" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
-                        <TextBox Text="{Binding Draft.Streaming.StabilityDelayMs}" Width="120" HorizontalAlignment="Left" />
-
-                        <TextBlock Text="Размер изменяемого хвоста, слов" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
-                        <TextBox Text="{Binding Draft.Streaming.VolatileTailWords}" Width="120" HorizontalAlignment="Left" />
-
-                        <TextBlock Text="Whisper — финальная обработка" Style="{StaticResource SectionHeader}" />
-                        <TextBlock Text="Модель" Style="{StaticResource MutedText}" />
-                        <ComboBox ItemsSource="{Binding WhisperModelChoices}" DisplayMemberPath="Name"
-                                  SelectedValuePath="Path" SelectedValue="{Binding Draft.Whisper.ModelPath}" />
-                        <TextBlock Text="{Binding Draft.Whisper.ModelPath}" Style="{StaticResource MutedText}"
-                                   FontSize="11" Margin="0,2,0,0" />
-
-                        <TextBlock Text="Потоков CPU" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
-                        <TextBox Text="{Binding Draft.Whisper.CpuThreads}" Width="120" HorizontalAlignment="Left" />
-
-                        <CheckBox Content="После остановки диктовки прогонять всю запись целиком" Margin="0,8,0,0"
-                                  IsChecked="{Binding Draft.Whisper.FullPassAfterStop}" />
-                        <TextBlock Style="{StaticResource MutedText}" Margin="22,0,0,6"
-                                   Text="Проход по всей диктовке согласует пунктуацию и формы слов между фразами. Пока он идёт, курсор показывает занятость: правка текста в этот момент отменит замену." />
-
-                        <CheckBox Content="Передавать Whisper контекст предыдущей фразы" Margin="0,8,0,0"
-                                  IsChecked="{Binding Draft.Whisper.UsePreviousTextContext}" />
-                        <TextBlock Style="{StaticResource MutedText}"
-                                   Text="Контекст улучшает согласование форм слов, но передаётся ограниченным числом последних слов." />
+                        <TextBlock Style="{StaticResource MutedText}" Margin="0,8,0,0"
+                                   Text="Последняя гипотеза закрепляется при паузе или остановке без дополнительного распознавания." />
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
@@ -239,11 +197,6 @@
                     <TextBlock Text="Пауза перед восстановлением буфера обмена, мс" Style="{StaticResource MutedText}" Margin="0,8,0,0" />
                     <TextBox Text="{Binding Draft.Injection.ClipboardRestoreDelayMs}" Width="120" HorizontalAlignment="Left" />
 
-                    <TextBlock Text="Безопасность замены" Style="{StaticResource SectionHeader}" />
-                    <CheckBox Content="Разрешать автоматическую замену текста результатом Whisper"
-                              IsChecked="{Binding Draft.Injection.SafeFinalReplacement}" />
-                    <CheckBox Content="Запрещать замену после вмешательства пользователя"
-                              IsChecked="{Binding Draft.Injection.BlockReplacementAfterIntervention}" />
                     <TextBlock Style="{StaticResource MutedText}"
                                Text="Приложение изменяет только символы, которые вставило само, и никогда не удаляет текст пользователя." />
                 </StackPanel>

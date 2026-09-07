@@ -5,7 +5,7 @@ public enum ModelKind
     /// <summary>Потоковая модель распознавания (sherpa-onnx, Zipformer).</summary>
     Streaming,
 
-    /// <summary>Модель финальной проверки фразы (whisper.cpp).</summary>
+    /// <summary>Устаревшая модель финальной проверки фразы (оставлена для чтения старых настроек).</summary>
     Whisper,
 }
 
@@ -34,7 +34,7 @@ public sealed record ModelDescriptor(
     public IEnumerable<string> DownloadUrls =>
         FallbackUrls is null ? [Url] : new[] { Url }.Concat(FallbackUrls);
 
-    /// <summary>Потоковая модель распространяется архивом, Whisper — одним файлом весов.</summary>
+    /// <summary>Потоковые модели распространяются архивами.</summary>
     public bool IsArchive => Kind == ModelKind.Streaming;
 
     public string SizeText => ApproximateSizeBytes >= 1024L * 1024 * 1024
@@ -48,14 +48,11 @@ public sealed record ModelDescriptor(
 /// <remarks>
 /// Большие модели не входят в установщик: он остался бы гигабайтным ради
 /// файлов, которые части пользователей не нужны. Вместо этого при первом
-/// запуске предлагается скачать рекомендованный набор — русскую и английскую
-/// модели Zipformer и мультиязычную модель Whisper.
+/// запуске предлагается скачать текущий набор — русскую и английскую модели
+/// Zipformer.
 ///
-/// Первым источником указано зеркало, а исходный сайт — запасным. Причина
-/// практическая: у части провайдеров alphacephei.com и huggingface.co отдают
-/// порядка килобайта в секунду, и загрузка формально идёт, но не заканчивается.
-/// Подмену содержимого исключает контрольная сумма: она снята с файла,
-/// совпадающего с оригиналом по размеру, и проверяется после каждой загрузки.
+/// Подмену или повреждение содержимого исключает контрольная сумма, которая
+/// проверяется после каждой загрузки.
 /// </remarks>
 public static class ModelCatalog
 {
@@ -65,9 +62,6 @@ public static class ModelCatalog
     /// части провайдеров тот выдаёт около килобайта в секунду.
     /// </remarks>
     private const string SherpaModels = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models";
-
-    private const string WhisperMirror = "https://hf-mirror.com/ggerganov/whisper.cpp/resolve/main";
-    private const string WhisperOrigin = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main";
 
     public static IReadOnlyList<ModelDescriptor> All { get; } = new[]
     {
@@ -92,30 +86,6 @@ public static class ModelCatalog
             "Компактная модель на 20M параметров, подходит для потокового ввода на любом CPU.",
             Recommended: true,
             Sha256: "9C559283E8498D3FE95913C79CA1CB454BB26281AC2B102B41306C7D752765D9"),
-
-        new ModelDescriptor(
-            "ggml-small-q5_1",
-            "Whisper small, квантованная",
-            ModelKind.Whisper,
-            RecognitionLanguage.Auto,
-            $"{WhisperMirror}/ggml-small-q5_1.bin",
-            190_085_487,
-            "Мультиязычная. Финализация фразы примерно за секунду на 4 ядрах.",
-            Recommended: true,
-            Sha256: "AE85E4A935D7A567BD102FE55AFC16BB595BDB618E11B2FC7591BC08120411BB",
-            FallbackUrls: [$"{WhisperOrigin}/ggml-small-q5_1.bin"]),
-
-        new ModelDescriptor(
-            "ggml-medium-q5_0",
-            "Whisper medium, квантованная",
-            ModelKind.Whisper,
-            RecognitionLanguage.Auto,
-            $"{WhisperMirror}/ggml-medium-q5_0.bin",
-            539_212_467,
-            "Заметно точнее на терминах, требует 4+ ядер и 2 ГБ памяти.",
-            Recommended: false,
-            Sha256: "19FEA4B380C3A618EC4723C3EEF2EB785FFBA0D0538CF43F8F235E7B3B34220F",
-            FallbackUrls: [$"{WhisperOrigin}/ggml-medium-q5_0.bin"]),
     };
 
     public static IEnumerable<ModelDescriptor> Recommended => All.Where(model => model.Recommended);

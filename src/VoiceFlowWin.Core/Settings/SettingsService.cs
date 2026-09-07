@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using VoiceFlowWin.Core.Models;
 
 namespace VoiceFlowWin.Core.Settings;
 
@@ -60,7 +61,7 @@ public sealed class SettingsService : ISettingsService
     public event EventHandler<AppSettings>? SettingsChanged;
 
     /// <summary>Текущая версия схемы настроек.</summary>
-    public const int CurrentSchemaVersion = 6;
+    public const int CurrentSchemaVersion = 7;
 
     public AppSettings Load()
     {
@@ -158,6 +159,24 @@ public sealed class SettingsService : ISettingsService
         {
             settings.Segmentation.SilenceToEndSegmentMs = 5000;
             _logger.LogInformation("Пауза завершения фрагмента перенесена на 5000 мс.");
+        }
+
+        // Седьмая версия отказалась от отдельной финализации: единственным
+        // результатом стал текущий текст Zipformer. Переносим все прежние
+        // варианты ввода на него, чтобы старый settings.json не вернул серый
+        // невведённый хвост или замену текста после остановки.
+        if (settings.SchemaVersion < 7)
+        {
+            settings.General.LiveTextMode = LiveTextMode.MaximumLive;
+            settings.Whisper.FullPassAfterStop = false;
+            settings.Injection.SafeFinalReplacement = false;
+
+            if (settings.General.LanguageMode == LanguageSelectionMode.WhisperAutoDetect)
+            {
+                settings.General.LanguageMode = LanguageSelectionMode.FollowKeyboardLayout;
+            }
+
+            _logger.LogInformation("Распознавание перенесено на единый потоковый набор без финализации.");
         }
 
         settings.SchemaVersion = CurrentSchemaVersion;

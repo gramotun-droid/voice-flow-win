@@ -109,7 +109,44 @@ public readonly record struct SemanticVersion(int Major, int Minor, int Patch, s
             return 1;
         }
 
-        return string.Compare(PreRelease, other.PreRelease, StringComparison.OrdinalIgnoreCase);
+        return ComparePreRelease(PreRelease, other.PreRelease);
+    }
+
+    private static int ComparePreRelease(string? left, string? right)
+    {
+        var leftParts = (left ?? string.Empty).Split('.');
+        var rightParts = (right ?? string.Empty).Split('.');
+        var count = Math.Min(leftParts.Length, rightParts.Length);
+
+        for (var i = 0; i < count; i++)
+        {
+            var leftNumeric = int.TryParse(leftParts[i], NumberStyles.None, CultureInfo.InvariantCulture, out var leftNumber);
+            var rightNumeric = int.TryParse(rightParts[i], NumberStyles.None, CultureInfo.InvariantCulture, out var rightNumber);
+
+            int result;
+            if (leftNumeric && rightNumeric)
+            {
+                result = leftNumber.CompareTo(rightNumber);
+            }
+            else if (leftNumeric != rightNumeric)
+            {
+                // По SemVer числовой идентификатор младше буквенного.
+                result = leftNumeric ? -1 : 1;
+            }
+            else
+            {
+                result = string.Compare(leftParts[i], rightParts[i], StringComparison.OrdinalIgnoreCase);
+            }
+
+            if (result != 0)
+            {
+                return result;
+            }
+        }
+
+        // При одинаковом начале более длинный набор идентификаторов старше:
+        // beta.1.1 > beta.1.
+        return leftParts.Length.CompareTo(rightParts.Length);
     }
 
     public static bool operator <(SemanticVersion left, SemanticVersion right) => left.CompareTo(right) < 0;

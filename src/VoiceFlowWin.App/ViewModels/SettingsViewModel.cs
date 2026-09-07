@@ -436,6 +436,14 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
 
     private async Task CheckUpdatesAsync()
     {
+        // Пользователь ожидает, что выбранный канал действует уже для кнопки
+        // рядом, даже если общую кнопку «Сохранить» ещё не нажал. Сохраняем
+        // только настройки обновлений, не затрагивая остальные правки черновика.
+        var persisted = Clone(_settingsService.Current);
+        persisted.Updates.Channel = Draft.Updates.Channel;
+        persisted.Updates.AutomaticDownload = Draft.Updates.AutomaticDownload;
+        _settingsService.Save(persisted);
+
         await _updates.CheckNowAsync(CancellationToken.None);
         Draft.Updates.LastCheckedAt = _settingsService.Current.Updates.LastCheckedAt;
         OnPropertyChanged(nameof(LastCheckedText));

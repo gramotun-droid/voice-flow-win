@@ -39,6 +39,7 @@ public class SemanticVersionTests
     {
         Assert.True(SemanticVersion.Parse("1.4.0") > SemanticVersion.Parse("1.4.0-beta.1"));
         Assert.True(SemanticVersion.Parse("1.4.0-beta.2") > SemanticVersion.Parse("1.4.0-beta.1"));
+        Assert.True(SemanticVersion.Parse("1.4.0-beta.10") > SemanticVersion.Parse("1.4.0-beta.9"));
         Assert.True(SemanticVersion.Parse("1.4.0-beta.1").IsPreRelease);
     }
 
@@ -170,6 +171,102 @@ public sealed class UpdateServiceTests : IDisposable
 
         var reloaded = new SettingsService(_paths).Load();
         Assert.NotNull(reloaded.Updates.LastCheckedAt);
+    }
+
+    [Fact]
+    public async Task Beta_канал_ищет_prerelease_до_стабильного_latest_манифеста()
+    {
+        const string releasesUrl = "https://example.com/releases";
+        const string stableManifestUrl = "https://example.com/latest/update-manifest.json";
+        const string betaManifestUrl = "https://example.com/beta.5/update-manifest.json";
+
+        var settingsService = new SettingsService(_paths);
+        var settings = settingsService.Load();
+        settings.Updates.Channel = UpdateChannel.Beta;
+        settings.Updates.AutomaticDownload = false;
+        settings.Updates.ManifestUrl = stableManifestUrl;
+        settings.Updates.ReleasesApiUrl = releasesUrl;
+        settingsService.Save(settings);
+
+        var handler = new RoutingHandler(new Dictionary<string, string>
+        {
+            [releasesUrl] = $$"""
+                [
+                  {
+                    "tag_name": "v0.3.0-beta.5",
+                    "html_url": "https://example.com/release/beta.5",
+                    "draft": false,
+                    "prerelease": true,
+                    "assets": [
+                      {
+                        "name": "update-manifest.json",
+                        "browser_download_url": "{{betaManifestUrl}}",
+                        "size": 500
+                      },
+                      {
+                        "name": "VoiceFlowWin-Setup-x64-0.3.0-beta.5.exe",
+                        "browser_download_url": "https://example.com/beta.5/setup.exe",
+                        "size": 123456
+                      }
+                    ]
+                  }
+                ]
+                """,
+            [betaManifestUrl] = """
+                {
+                  "version": "0.3.0-beta.5",
+                  "installerUrl": "https://example.com/beta.5/setup.exe",
+                  "sha256": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                  "size": 123456,
+                  "releaseNotesUrl": "https://example.com/release/beta.5",
+                  "unsigned": true
+                }
+                """,
+            [stableManifestUrl] = """
+                {
+                  "version": "0.2.4",
+                  "installerUrl": "https://example.com/stable/setup.exe",
+                  "sha256": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+                  "size": 123456
+                }
+                """,
+        });
+
+        using var httpClient = new HttpClient(handler);
+        var verifier = new PackageVerifier();
+        await using var service = new UpdateService(
+            httpClient,
+            new UpdateDownloader(httpClient, verifier),
+            verifier,
+            settingsService,
+            _paths,
+            SemanticVersion.Parse("0.3.0-beta.4"));
+
+        var status = await service.CheckNowAsync(CancellationToken.None);
+
+        Assert.Equal(UpdateState.UpdateAvailable, status.State);
+        Assert.Equal(SemanticVersion.Parse("0.3.0-beta.5"), status.AvailableVersion);
+        Assert.Contains(releasesUrl, handler.Requests);
+        Assert.Contains(betaManifestUrl, handler.Requests);
+        Assert.DoesNotContain(stableManifestUrl, handler.Requests);
+    }
+
+    private sealed class RoutingHandler(IReadOnlyDictionary<string, string> responses) : HttpMessageHandler
+    {
+        public List<string> Requests { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var url = request.RequestUri!.AbsoluteUri;
+            Requests.Add(url);
+
+            return Task.FromResult(responses.TryGetValue(url, out var content)
+                ? new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new StringContent(content, System.Text.Encoding.UTF8, "application/json"),
+                }
+                : new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
+        }
     }
 }
 

@@ -327,13 +327,28 @@ public sealed class UpdateService : IAsyncDisposable
     {
         var updateSettings = _settings.Current.Updates;
 
+        // GitHub /releases/latest намеренно не возвращает prerelease. Поэтому
+        // на Beta-канале сначала ищем свежий выпуск в полном списке релизов;
+        // иначе валидный, но старый stable-манифест остановит поиск раньше и
+        // приложение ошибочно сообщит, что версия актуальна.
+        if (updateSettings.Channel == UpdateChannel.Beta)
+        {
+            var betaManifest = await TryFetchFromReleasesApiAsync(updateSettings, cancellationToken).ConfigureAwait(false);
+            if (betaManifest is not null)
+            {
+                return betaManifest;
+            }
+        }
+
         var manifest = await TryFetchManifestAsync(updateSettings.ManifestUrl, cancellationToken).ConfigureAwait(false);
         if (manifest is not null)
         {
             return manifest;
         }
 
-        return await TryFetchFromReleasesApiAsync(updateSettings, cancellationToken).ConfigureAwait(false);
+        return updateSettings.Channel == UpdateChannel.Beta
+            ? null
+            : await TryFetchFromReleasesApiAsync(updateSettings, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<UpdateManifest?> TryFetchManifestAsync(string url, CancellationToken cancellationToken)
@@ -384,11 +399,33 @@ public sealed class UpdateService : IAsyncDisposable
             var release = releases
                 .Where(item => allowPrerelease || !item.Prerelease)
                 .Where(item => !item.Draft)
+                .Select(item => new
+                {
+                    Release = item,
+                    Parsed = SemanticVersion.TryParse(item.TagName, out var parsed) ? parsed : SemanticVersion.Zero,
+                })
+                .Where(item => item.Parsed != SemanticVersion.Zero)
+                .OrderByDescending(item => item.Parsed)
+                .Select(item => item.Release)
                 .FirstOrDefault();
 
             if (release is null)
             {
                 return null;
+            }
+
+            // Release-workflow публикует манифест отдельным asset. В отличие
+            // от синтетического результата API, он содержит SHA-256 и позволяет
+            // безопасно скачать beta автоматически.
+            var manifestAsset = release.Assets.FirstOrDefault(asset =>
+                string.Equals(asset.Name, "update-manifest.json", StringComparison.OrdinalIgnoreCase));
+            if (manifestAsset is not null)
+            {
+                var manifest = await TryFetchManifestAsync(manifestAsset.BrowserDownloadUrl, cancellationToken).ConfigureAwait(false);
+                if (manifest is not null)
+                {
+                    return manifest;
+                }
             }
 
             var installer = release.Assets.FirstOrDefault(asset =>

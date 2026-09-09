@@ -21,16 +21,25 @@ public static class TextNormalizer
     /// <summary>Схлопывает пробелы и убирает пробелы перед знаками препинания.</summary>
     public static string NormalizeWhitespace(string? text)
     {
-        if (string.IsNullOrWhiteSpace(text))
+        if (string.IsNullOrEmpty(text))
+        {
+            return string.Empty;
+        }
+
+        // Обычные пробелы сами по себе текста не образуют, но перевод строки
+        // является осмысленной голосовой командой и должен сохраниться.
+        if (!text.Any(c => c is '\n' or '\r') && string.IsNullOrWhiteSpace(text))
         {
             return string.Empty;
         }
 
         var builder = new StringBuilder(text.Length);
         var pendingSpace = false;
+        var trimmed = text.Trim(' ', '\t', '\f', '\v');
 
-        foreach (var c in text.Trim())
+        for (var index = 0; index < trimmed.Length; index++)
         {
+            var c = trimmed[index];
             if (char.IsWhiteSpace(c))
             {
                 // Переводы строк сохраняем: их вставляют голосовые команды.
@@ -39,6 +48,13 @@ public static class TextNormalizer
                     TrimTrailingSpaces(builder);
                     builder.Append('\n');
                     pendingSpace = false;
+
+                    // Windows-перенос CRLF представляет одну новую строку.
+                    if (c == '\r' && index + 1 < trimmed.Length && trimmed[index + 1] == '\n')
+                    {
+                        index++;
+                    }
+
                     continue;
                 }
 

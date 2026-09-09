@@ -76,6 +76,8 @@
                         <CheckBox Content="Автоматическая пунктуация" IsChecked="{Binding Draft.General.AutomaticPunctuation}" />
                         <CheckBox Content="Голосовые команды пунктуации и правки" IsChecked="{Binding Draft.General.VoiceCommandsEnabled}" />
                         <CheckBox Content="Показывать overlay" IsChecked="{Binding Draft.Overlay.Visible}" />
+                        <CheckBox Content="Показывать микрофон у текстового курсора"
+                                  IsChecked="{Binding Draft.Overlay.ShowCaretIndicator}" />
                         <CheckBox Content="Скрывать текст в overlay" IsChecked="{Binding Draft.Overlay.HideText}" />
 
                     </StackPanel>

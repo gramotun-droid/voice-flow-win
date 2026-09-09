@@ -670,6 +670,7 @@ public sealed class SettingsViewModel : ObservableObject, IDisposable
         Overlay = new OverlaySettings
         {
             Visible = source.Overlay.Visible,
+            ShowCaretIndicator = source.Overlay.ShowCaretIndicator,
             MinimalMode = source.Overlay.MinimalMode,
             HideText = source.Overlay.HideText,
             Left = source.Overlay.Left,

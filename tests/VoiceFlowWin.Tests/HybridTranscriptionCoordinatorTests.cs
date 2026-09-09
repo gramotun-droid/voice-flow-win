@@ -251,6 +251,40 @@ public class HybridTranscriptionCoordinatorTests
     }
 
     [Fact]
+    public async Task Уточнение_слова_до_точки_убирает_разделяющий_пробел()
+    {
+        var harness = new Harness();
+        await harness.DictateAsync(new[] { "привет" }, "привет");
+
+        var punctuation = harness.Coordinator.BeginSegment(RecognitionLanguage.Russian);
+        await harness.Coordinator.OnPartialResultAsync(punctuation.SegmentId, "то", Start, CancellationToken.None);
+        await harness.Coordinator.OnPartialResultAsync(
+            punctuation.SegmentId,
+            "точка",
+            Start.AddMilliseconds(200),
+            CancellationToken.None);
+
+        Assert.Equal("Привет.", harness.Field.Content);
+    }
+
+    [Fact]
+    public async Task Команда_с_новой_строки_заменяет_предварительную_гипотезу()
+    {
+        var harness = new Harness();
+        await harness.DictateAsync(new[] { "первая" }, "первая");
+
+        var newLine = harness.Coordinator.BeginSegment(RecognitionLanguage.Russian);
+        await harness.Coordinator.OnPartialResultAsync(newLine.SegmentId, "с новой", Start, CancellationToken.None);
+        await harness.Coordinator.OnPartialResultAsync(
+            newLine.SegmentId,
+            "с новой строки",
+            Start.AddMilliseconds(200),
+            CancellationToken.None);
+
+        Assert.Equal("Первая\n", harness.Field.Content);
+    }
+
+    [Fact]
     public async Task Сценарий_3_После_ввода_пользователя_замена_не_выполняется()
     {
         var harness = new Harness();

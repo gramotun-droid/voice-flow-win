@@ -254,6 +254,9 @@ public sealed class OverlaySettings
 {
     public bool Visible { get; set; } = true;
 
+    /// <summary>Показывать маленький микрофон рядом с системной текстовой кареткой.</summary>
+    public bool ShowCaretIndicator { get; set; } = true;
+
     public bool MinimalMode { get; set; }
 
     public bool HideText { get; set; }

@@ -9,6 +9,20 @@ public interface IFocusTracker
     WindowFocusSnapshot Capture();
 }
 
+/// <summary>Прямоугольник системной текстовой каретки в экранных пикселях.</summary>
+public readonly record struct CaretScreenBounds(int Left, int Top, int Right, int Bottom);
+
+/// <summary>Находит экранную позицию каретки активного поля ввода.</summary>
+public interface ICaretPositionProvider
+{
+    /// <remarks>
+    /// Некоторые приложения рисуют собственную каретку и не сообщают её
+    /// Windows. В таком случае метод возвращает false, а интерфейс просто не
+    /// показывает привязанный к каретке индикатор.
+    /// </remarks>
+    bool TryGetCaretBounds(out CaretScreenBounds bounds);
+}
+
 /// <summary>Причина, по которой сегмент нужно заморозить.</summary>
 public enum InterventionKind
 {

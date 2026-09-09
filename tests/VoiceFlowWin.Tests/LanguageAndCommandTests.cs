@@ -118,12 +118,18 @@ public class VoiceCommandProcessorTests
     [InlineData("вопрос вопросительный знак", "вопрос?")]
     [InlineData("итог двоеточие первое", "итог: первое")]
     [InlineData("раз точка с запятой два", "раз; два")]
+    [InlineData("раз точка запятой два", "раз; два")]
+    [InlineData("слово тире слово", "слово — слово")]
     public void Команды_пунктуации_раскрываются(string input, string expected) =>
         Assert.Equal(expected, Processor.Process(input, RecognitionLanguage.Russian).Text);
 
     [Fact]
     public void Новая_строка_вставляет_перенос() =>
         Assert.Equal("первая\nвторая", Processor.Process("первая новая строка вторая", RecognitionLanguage.Russian).Text);
+
+    [Fact]
+    public void С_новой_строки_вставляет_перенос() =>
+        Assert.Equal("первая\nвторая", Processor.Process("первая с новой строки вторая", RecognitionLanguage.Russian).Text);
 
     [Fact]
     public void Удаление_последнего_слова_убирает_слово() =>
@@ -183,6 +189,13 @@ public class TextNormalizerTests
     [Fact]
     public void Переносы_строк_сохраняются() =>
         Assert.Equal("первая\nвторая", TextNormalizer.NormalizeWhitespace("первая \n вторая"));
+
+    [Theory]
+    [InlineData("\n", "\n")]
+    [InlineData("\r\n", "\n")]
+    [InlineData("\n\n", "\n\n")]
+    public void Перенос_без_слов_остаётся_текстом(string input, string expected) =>
+        Assert.Equal(expected, TextNormalizer.NormalizeWhitespace(input));
 
     [Fact]
     public void Первая_буква_поднимается_в_верхний_регистр()

@@ -17,16 +17,29 @@ internal static class UnicodeInputBuilder
     /// <summary>Строит пары «нажатие + отпускание» для каждого code unit.</summary>
     internal static NativeMethods.INPUT[] BuildTextInput(string text)
     {
-        var inputs = new NativeMethods.INPUT[text.Length * 2];
-        var index = 0;
+        var inputs = new List<NativeMethods.INPUT>(text.Length * 2);
 
-        foreach (var codeUnit in text)
+        for (var index = 0; index < text.Length; index++)
         {
-            inputs[index++] = CreateUnicodeInput(codeUnit, keyUp: false);
-            inputs[index++] = CreateUnicodeInput(codeUnit, keyUp: true);
+            var codeUnit = text[index];
+            if (IsNewLine(codeUnit))
+            {
+                // CRLF — один перенос, а не два Enter подряд.
+                if (codeUnit == '\r' && index + 1 < text.Length && text[index + 1] == '\n')
+                {
+                    index++;
+                }
+
+                inputs.Add(CreateVirtualKeyInput(NativeMethods.VK_RETURN, keyUp: false));
+                inputs.Add(CreateVirtualKeyInput(NativeMethods.VK_RETURN, keyUp: true));
+                continue;
+            }
+
+            inputs.Add(CreateUnicodeInput(codeUnit, keyUp: false));
+            inputs.Add(CreateUnicodeInput(codeUnit, keyUp: true));
         }
 
-        return inputs;
+        return inputs.ToArray();
     }
 
     /// <summary>Строит нужное число нажатий Backspace.</summary>

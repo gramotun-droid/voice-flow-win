@@ -505,6 +505,7 @@ public sealed class HybridTranscriptionCoordinator
         }
 
         var text = _dictionary.Apply(rawText, context.Segment.Language);
+        _commands.Enabled = _settings.Current.General.VoiceCommandsEnabled;
         var commandResult = _commands.Process(text, context.Segment.Language);
         text = TextNormalizer.NormalizeWhitespace(commandResult.Text);
 
@@ -519,6 +520,7 @@ public sealed class HybridTranscriptionCoordinator
     private string BuildFinalText(SegmentContext context, string whisperText)
     {
         var text = _dictionary.Apply(whisperText, context.Segment.Language);
+        _commands.Enabled = _settings.Current.General.VoiceCommandsEnabled;
         var commandResult = _commands.Process(text, context.Segment.Language);
         return TextNormalizer.PrepareSegmentText(
             commandResult.Text,
@@ -572,10 +574,13 @@ public sealed class HybridTranscriptionCoordinator
     {
         var segment = context.Segment;
 
-        if (desiredCore.Length > 0 && segment.InjectedText.Length == 0)
-        {
-            context.Separator = TextNormalizer.NeedsSeparatingSpace(context.ContextBefore, desiredCore) ? " " : string.Empty;
-        }
+        // Разделитель зависит от текущей гипотезы. Например, распознаватель
+        // сначала отдаёт «то», а затем уточняет его до команды «точка»: пробел,
+        // добавленный перед незавершённым словом, должен исчезнуть вместе с ним.
+        context.Separator = desiredCore.Length > 0 &&
+            TextNormalizer.NeedsSeparatingSpace(context.ContextBefore, desiredCore)
+                ? " "
+                : string.Empty;
 
         var desired = desiredCore.Length == 0 ? string.Empty : context.Separator + desiredCore;
         if (string.Equals(desired, segment.InjectedText, StringComparison.Ordinal))

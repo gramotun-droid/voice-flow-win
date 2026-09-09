@@ -18,7 +18,7 @@ namespace VoiceFlowWin.Windows.System;
 /// больше нельзя.
 /// </remarks>
 [SupportedOSPlatform("windows")]
-public sealed class ForegroundFocusTracker : IFocusTracker
+public sealed class ForegroundFocusTracker : IFocusTracker, ICaretPositionProvider
 {
     public WindowFocusSnapshot Capture()
     {
@@ -58,6 +58,55 @@ public sealed class ForegroundFocusTracker : IFocusTracker
             FocusedControlId: GetClassName(focusedControl),
             CaretPosition: caretPosition,
             KeyboardLayoutId: (int)layout);
+    }
+
+    public bool TryGetCaretBounds(out CaretScreenBounds bounds)
+    {
+        bounds = default;
+
+        var window = NativeMethods.GetForegroundWindow();
+        if (window == 0)
+        {
+            return false;
+        }
+
+        var threadId = NativeMethods.GetWindowThreadProcessId(window, out _);
+        var guiInfo = new NativeMethods.GUITHREADINFO
+        {
+            cbSize = global::System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.GUITHREADINFO>(),
+        };
+
+        if (!NativeMethods.GetGUIThreadInfo(threadId, ref guiInfo) || guiInfo.hwndCaret == 0)
+        {
+            return false;
+        }
+
+        var topLeft = new NativeMethods.POINT
+        {
+            X = guiInfo.rcCaret.Left,
+            Y = guiInfo.rcCaret.Top,
+        };
+        var bottomRight = new NativeMethods.POINT
+        {
+            X = guiInfo.rcCaret.Right,
+            Y = guiInfo.rcCaret.Bottom,
+        };
+
+        if (!NativeMethods.ClientToScreen(guiInfo.hwndCaret, ref topLeft) ||
+            !NativeMethods.ClientToScreen(guiInfo.hwndCaret, ref bottomRight))
+        {
+            return false;
+        }
+
+        // У каретки часто нулевая ширина. Это нормальная позиция, но полностью
+        // пустой либо вывернутый прямоугольник означает сбой Win32 API.
+        if (bottomRight.X < topLeft.X || bottomRight.Y <= topLeft.Y)
+        {
+            return false;
+        }
+
+        bounds = new CaretScreenBounds(topLeft.X, topLeft.Y, bottomRight.X, bottomRight.Y);
+        return true;
     }
 
     private static string GetWindowTitle(nint window)

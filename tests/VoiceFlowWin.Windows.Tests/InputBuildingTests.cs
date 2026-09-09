@@ -45,6 +45,20 @@ public class InputBuildingTests
         Assert.Equal(0xDC4B, inputs[2].u.ki.wScan);
     }
 
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r")]
+    [InlineData("\r\n")]
+    public void Перевод_строки_отправляется_как_одно_нажатие_Enter(string newLine)
+    {
+        var inputs = UnicodeInputBuilder.BuildTextInput(newLine);
+
+        Assert.Equal(2, inputs.Length);
+        Assert.All(inputs, input => Assert.Equal(NativeMethods.VK_RETURN, input.u.ki.wVk));
+        Assert.Equal(0u, inputs[0].u.ki.dwFlags & NativeMethods.KEYEVENTF_KEYUP);
+        Assert.NotEqual(0u, inputs[1].u.ki.dwFlags & NativeMethods.KEYEVENTF_KEYUP);
+    }
+
     [Fact]
     public void Backspace_строится_нужное_число_раз()
     {

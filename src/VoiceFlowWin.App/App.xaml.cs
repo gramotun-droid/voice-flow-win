@@ -32,6 +32,7 @@ public partial class App : Application
     private ServiceProvider? _services;
     private TrayIconHost? _tray;
     private OverlayWindow? _overlay;
+    private CaretIndicatorWindow? _caretIndicator;
     private SettingsWindow? _settingsWindow;
     private CancellationTokenSource? _modelDownloads;
 
@@ -110,6 +111,8 @@ public partial class App : Application
         // Overlay создаётся сразу, но показывается только на время диктовки.
         _overlay = _services.GetRequiredService<OverlayWindow>();
         _overlay.SyncVisibility();
+        _caretIndicator = _services.GetRequiredService<CaretIndicatorWindow>();
+        _caretIndicator.SyncVisibility();
 
         _tray = _services.GetRequiredService<TrayIconHost>();
         _tray.ShowSettingsRequested += (_, _) => ShowSettings();
@@ -225,7 +228,9 @@ public partial class App : Application
         services.AddSingleton<LowLevelKeyboardHook>();
         services.AddSingleton<ClipboardService>();
         services.AddSingleton<IPrivilegeLevelDetector, PrivilegeLevelDetector>();
-        services.AddSingleton<IFocusTracker, ForegroundFocusTracker>();
+        services.AddSingleton<ForegroundFocusTracker>();
+        services.AddSingleton<IFocusTracker>(provider => provider.GetRequiredService<ForegroundFocusTracker>());
+        services.AddSingleton<ICaretPositionProvider>(provider => provider.GetRequiredService<ForegroundFocusTracker>());
         services.AddSingleton<IStartupService, StartupService>();
         services.AddSingleton<ITextInjectionService, TextInjectionService>();
         services.AddSingleton<IInputInterventionMonitor, InputInterventionMonitor>();
@@ -264,6 +269,7 @@ public partial class App : Application
         services.AddSingleton<TrayIconHost>();
         services.AddSingleton<OverlayViewModel>();
         services.AddSingleton<OverlayWindow>();
+        services.AddSingleton<CaretIndicatorWindow>();
         services.AddTransient<SettingsViewModel>();
         services.AddTransient<SettingsWindow>();
 

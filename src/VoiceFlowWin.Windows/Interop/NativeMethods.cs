@@ -21,6 +21,7 @@ internal static class NativeMethods
 
     internal const int VK_ESCAPE = 0x1B;
     internal const int VK_BACK = 0x08;
+    internal const int VK_RETURN = 0x0D;
     internal const int VK_CONTROL = 0x11;
     internal const int VK_MENU = 0x12;
     internal const int VK_SHIFT = 0x10;
@@ -188,6 +189,10 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool GetGUIThreadInfo(uint idThread, ref GUITHREADINFO lpgui);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool ClientToScreen(nint hWnd, ref POINT lpPoint);
 
     [DllImport("user32.dll")]
     internal static extern short GetAsyncKeyState(int vKey);

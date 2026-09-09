@@ -43,10 +43,12 @@ public sealed class VoiceCommandProcessor
         Insert("запятая", ",", RecognitionLanguage.Russian),
         Insert("двоеточие", ":", RecognitionLanguage.Russian),
         Insert("точка с запятой", ";", RecognitionLanguage.Russian),
+        Insert("точка запятой", ";", RecognitionLanguage.Russian),
         Insert("вопросительный знак", "?", RecognitionLanguage.Russian),
         Insert("восклицательный знак", "!", RecognitionLanguage.Russian),
         Insert("многоточие", "…", RecognitionLanguage.Russian),
         Insert("тире", "—", RecognitionLanguage.Russian),
+        Insert("с новой строки", "\n", RecognitionLanguage.Russian),
         Insert("новая строка", "\n", RecognitionLanguage.Russian),
         Insert("новый абзац", "\n\n", RecognitionLanguage.Russian),
         Insert("открыть скобку", "(", RecognitionLanguage.Russian),
@@ -192,6 +194,13 @@ public sealed class VoiceCommandProcessor
     private static void AppendInsertion(List<string> output, string insertion)
     {
         if (insertion is "\n" or "\n\n")
+        {
+            output.Add(insertion);
+            return;
+        }
+
+        // Тире — отдельный знак между словами, вокруг него нужны пробелы.
+        if (insertion == "—")
         {
             output.Add(insertion);
             return;

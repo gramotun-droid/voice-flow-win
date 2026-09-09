@@ -230,7 +230,7 @@ public partial class App : Application
         services.AddSingleton<IPrivilegeLevelDetector, PrivilegeLevelDetector>();
         services.AddSingleton<ForegroundFocusTracker>();
         services.AddSingleton<IFocusTracker>(provider => provider.GetRequiredService<ForegroundFocusTracker>());
-        services.AddSingleton<ICaretPositionProvider>(provider => provider.GetRequiredService<ForegroundFocusTracker>());
+        services.AddSingleton<ICaretPositionProvider, CaretPositionProvider>();
         services.AddSingleton<IStartupService, StartupService>();
         services.AddSingleton<ITextInjectionService, TextInjectionService>();
         services.AddSingleton<IInputInterventionMonitor, InputInterventionMonitor>();

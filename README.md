@@ -124,7 +124,7 @@ dotnet test tests/VoiceFlowWin.Windows.Tests/VoiceFlowWin.Windows.Tests.csproj
 ```powershell
 dotnet publish src/VoiceFlowWin.App/VoiceFlowWin.App.csproj -c Release -r win-x64 --self-contained false -o publish
 dotnet publish src/VoiceFlowWin.UpdaterHost/VoiceFlowWin.UpdaterHost.csproj -c Release -r win-x64 --self-contained false -o publish
-& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DMyAppVersion=0.3.0-beta.7 installer\voiceflowwin.iss
+& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DMyAppVersion=0.3.0-beta.8 installer\voiceflowwin.iss
 ```
 
 Версия задаётся в одном месте — `Directory.Build.props`; при выпуске её
@@ -135,8 +135,8 @@ dotnet publish src/VoiceFlowWin.UpdaterHost/VoiceFlowWin.UpdaterHost.csproj -c R
 Выпуск создаётся пушем тега:
 
 ```bash
-git tag v0.3.0-beta.7
-git push origin v0.3.0-beta.7
+git tag v0.3.0-beta.8
+git push origin v0.3.0-beta.8
 ```
 
 Workflow соберёт приложение, прогонит тесты, создаст установщик, portable-архив,

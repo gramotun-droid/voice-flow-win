@@ -10,7 +10,7 @@
   -->
   <PropertyGroup>
     <VersionPrefix>0.3.0</VersionPrefix>
-    <VersionSuffix>beta.7</VersionSuffix>
+    <VersionSuffix>beta.8</VersionSuffix>
     <Product>VoiceFlowWin</Product>
     <Company>gramotun</Company>
     <Authors>gramotun</Authors>

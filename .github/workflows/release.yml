@@ -59,12 +59,7 @@ jobs:
         run: |
           $version = '${{ steps.version.outputs.version }}'
           if ([string]::IsNullOrWhiteSpace($env:SIGNING_CERTIFICATE)) {
-            if ($version -notmatch '-') {
-              Write-Error "Стабильный релиз нельзя публиковать без SIGNING_CERTIFICATE. Выпустите prerelease или настройте сертификат."
-              exit 1
-            }
-
-            Write-Warning "Prerelease будет опубликован без подписи: сертификат не настроен."
+            Write-Warning "Релиз $version будет опубликован без цифровой подписи. Размер и SHA-256 установщика будут записаны в update-manifest.json."
           }
 
       - name: Restore
@@ -134,8 +129,8 @@ jobs:
           & $iscc /DMyAppVersion=${{ steps.version.outputs.version }} installer\voiceflowwin.iss
           Copy-Item "installer_output\VoiceFlowWin-Setup-x64-${{ steps.version.outputs.version }}.exe" artifacts\
 
-      # Stable без сертификата остановлен политикой выше; prerelease можно
-      # собрать unsigned, и это явно попадёт в update-manifest.json.
+      # При наличии сертификата подписывается любой выпуск. Его отсутствие
+      # явно фиксируется флагом unsigned в update-manifest.json.
       - name: Подпись установщика
         id: sign
         if: ${{ env.SIGNING_CERTIFICATE != '' }}
@@ -246,6 +241,10 @@ jobs:
           Модели распознавания в установщик не входят — при первом запуске приложение предложит их скачать.
           Проверить целостность файлов можно по checksums.txt.
           "@
+
+          if ([string]::IsNullOrWhiteSpace($env:SIGNING_CERTIFICATE)) {
+            $notes += "`n`nВажно: этот выпуск не имеет цифровой подписи. Windows может показать предупреждение SmartScreen."
+          }
 
           # Аргументы собираются списком: пустая строка, переданная позиционно,
           # воспринимается gh как имя файла и роняет публикацию.
